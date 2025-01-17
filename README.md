@@ -166,7 +166,5 @@ This project is licensed under the MIT License. See the [LICENSE](./LICENSE) fil
 ## Acknowledgments
 
 - Open-source libraries and frameworks: React.js, Socket.IO, Material-UI, Redux Toolkit, Node.js.
-- Community contributions and feedback.
-
-ok
+- Community contributions and feedback
 
