@@ -7,7 +7,7 @@ const IntroSection = () => {
       {/* Abstract Tech Graphics */}
       <div className="absolute inset-0">
         {/* Gradient Orb */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-gradient-to-r from-cyan-500/30 to-blue-500/30 rounded-full blur-3xl" />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-gradient-to-r from-cyan-500 to-cyan-700/30 rounded-full blur-3xl" />
         
         {/* Animated Code Lines */}
         <div className="absolute inset-0">
@@ -27,14 +27,14 @@ const IntroSection = () => {
         </div>
 
         {/* Floating Tech Symbols */}
-        {['</', '{;}', '/>', '()', '[]'].map((symbol, index) => (
+        {['</', '{;}', '/>', '()', '[]', '<>', '{}'].map((symbol, index) => (
           <div
             key={index}
-            className="absolute text-cyan-400/20 text-xl font-mono"
+            className="absolute text-cyan-400/40 text-xl font-mono"
             style={{
-              top: `${Math.random() * 70 + 15}%`,
-              left: `${Math.random() * 70 + 15}%`,
-              animation: `float ${3 + Math.random() * 2}s infinite ease-in-out`
+              top: `${Math.random() * 70 + 10}%`,
+              left: `${Math.random() * 70 + 20}%`,
+              animation: `float ${3 + Math.random() * 0.7}s infinite ease-in-out`
             }}
           >
             {symbol}

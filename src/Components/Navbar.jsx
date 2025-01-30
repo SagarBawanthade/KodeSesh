@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
-import { Button } from './Button';
+import React, { useState } from "react";
+import { useNavigate } from 'react-router-dom';
+import { Button } from "./Button";
 
 const Navbar = () => {
+  const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const navItems = [
-    { label: 'Docs', href: '/docs' },
-    { label: 'Blog', href: '/blog' },
-    { label: 'About', href: '/about' }
+    { label: "Docs", href: "/docs" },
+    { label: "Blog", href: "/blog" },
+    { label: "About", href: "/about" },
   ];
 
   return (
@@ -22,29 +24,24 @@ const Navbar = () => {
             <span className="text-xl font-bold text-white">KodeSesh</span>
           </div>
 
-          {/* Combined Navigation Links and Auth Buttons */}
+          {/* Desktop Navigation */}
           <div className="hidden md:flex items-center">
-            {/* Navigation Links */}
             <div className="flex items-center space-x-6 mr-8">
               {navItems.map((item) => (
-                <a
+                <button
                   key={item.label}
-                  href={item.href}
+                  onClick={() => navigate(item.href)}
                   className="text-gray-300 hover:text-white transition-colors"
                 >
                   {item.label}
-                </a>
+                </button>
               ))}
             </div>
-
-            {/* Auth Buttons */}
             <div className="flex items-center space-x-4">
-              <Button variant="ghost">
+              <Button variant="ghost" onClick={() => navigate("/signin")}>
                 Sign In
               </Button>
-              <Button>
-                Sign Up
-              </Button>
+              <Button onClick={() => navigate("/signup")}>Sign Up</Button>
             </div>
           </div>
 
@@ -52,6 +49,7 @@ const Navbar = () => {
           <button
             className="md:hidden text-white"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
+            aria-label="Toggle menu"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -85,26 +83,34 @@ const Navbar = () => {
         <div className="absolute right-4 top-16 w-48 bg-black border border-gray-800 rounded-md shadow-lg md:hidden z-50">
           <div className="py-2">
             {navItems.map((item) => (
-              <a
+              <button
                 key={item.label}
-                href={item.href}
-                className="block px-4 py-2 text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
-                onClick={() => setIsMenuOpen(false)}
+                onClick={() => {
+                  navigate(item.href);
+                  setIsMenuOpen(false);
+                }}
+                className="w-full text-left px-4 py-2 text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
               >
                 {item.label}
-              </a>
+              </button>
             ))}
             <div className="border-t border-gray-800 mt-2 pt-2 px-4 space-y-2">
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 className="w-full text-left"
-                onClick={() => setIsMenuOpen(false)}
+                onClick={() => {
+                  navigate("/signin");
+                  setIsMenuOpen(false);
+                }}
               >
                 Sign In
               </Button>
-              <Button 
+              <Button
                 className="w-full text-left"
-                onClick={() => setIsMenuOpen(false)}
+                onClick={() => {
+                  navigate("/signup");
+                  setIsMenuOpen(false);
+                }}
               >
                 Sign Up
               </Button>
@@ -117,3 +123,4 @@ const Navbar = () => {
 };
 
 export default Navbar;
+
