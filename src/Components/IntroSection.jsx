@@ -6,15 +6,12 @@ const HeroSection = () => {
     <div
       className="relative h-screen bg-cover bg-center flex items-center justify-start text-left"
       style={{
-        backgroundImage: `url('/src/assets/images/Hero1.jpg')`, // Update the path to your image
+        backgroundImage: `url('/src/assets/images/Hero1.jpg')`, 
       }}
     >
-      {/* Overlay to darken the background image */}
       <div className="absolute inset-0 bg-black bg-opacity-50"></div>
 
-      {/* Content */}
       <div className="relative z-10 text-white max-w-2xl px-8 ml-12">
-        {/* Headline */}
         <h1 className="text-6xl font-bold mb-6">
           Turn solo code{" "}
           <span className="inline-block">
@@ -25,12 +22,10 @@ const HeroSection = () => {
           </span>
         </h1>
 
-        {/* Paragraph */}
         <p className="text-2xl mb-12">
           Write, share, and collaborate on code in real-time.
         </p>
 
-        {/* Call-to-Action Buttons */}
         <div className="space-x-4  ">
         <button className="px-8 py-4 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition duration-300 text-xl">
             Start Building 

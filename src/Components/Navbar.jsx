@@ -45,7 +45,6 @@ const Navbar = () => {
             </div>
           </div>
 
-          {/* Mobile Menu Button */}
           <button
             className="md:hidden text-white"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -78,7 +77,6 @@ const Navbar = () => {
         </div>
       </nav>
 
-      {/* Mobile Menu Dropdown */}
       {isMenuOpen && (
         <div className="absolute right-4 top-16 w-48 bg-black border border-gray-800 rounded-md shadow-lg md:hidden z-50">
           <div className="py-2">
