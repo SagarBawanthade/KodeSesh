@@ -11,3 +11,21 @@
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-20px); }
 }
+
+@layer utilities {
+  .perspective {
+    perspective: 1000px;
+  }
+  .transform-style-preserve-3d {
+    transform-style: preserve-3d;
+  }
+  .rotate-y-20 {
+    transform: rotateY(20deg);
+  }
+  .-rotate-y-20 {
+    transform: rotateY(-20deg);
+  }
+  .translate-z-50 {
+    transform: translateZ(50px);
+  }
+}

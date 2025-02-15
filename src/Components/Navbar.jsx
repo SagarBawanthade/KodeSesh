@@ -15,7 +15,7 @@ const Navbar = () => {
   return (
     <div className="relative">
       <nav className="w-full h-14 border-b border-gray-800 bg-black shadow-lg shadow-cyan-500/50">
-        <div className="h-full max-w-7xl mx-auto px-4 flex items-center justify-between">
+        <div className="h-full max-w-7xl mx-auto px-0 flex items-center justify-between">
           {/* Logo and Site Name */}
           <div className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-gray-800 rounded-md flex items-center justify-center">

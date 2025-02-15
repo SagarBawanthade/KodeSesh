@@ -5,11 +5,17 @@ const SignInPage = () => {
     email: '',
     password: ''
   });
+  const [isLoading, setIsLoading] = useState(false); // State for loading
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Handle form submission
-    console.log('Form submitted:', formData);
+    setIsLoading(true); // Start loading
+
+    // Simulate an async operation (e.g., API call)
+    setTimeout(() => {
+      console.log('Form submitted:', formData);
+      setIsLoading(false); // Stop loading after operation
+    }, 2000); // Simulate a 2-second delay
   };
 
   const handleChange = (e) => {
@@ -22,13 +28,13 @@ const SignInPage = () => {
   return (
     <div className="relative w-full h-screen bg-black overflow-hidden">
       {/* Card Container */}
-      <div className="relative z-10 w-full h-full flex items-center justify-center">
+      <div className="relative z-10 w-full h-full flex items-center justify-center p-4">
         {/* Gradient Background Square */}
-        <div className="absolute w-[600px] h-[600px] bg-gradient-to-br from-teal-400 via-cyan-500 to-blue-500 opacity-30 blur-[100px]" />
+        <div className="absolute w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-gradient-to-br from-teal-400 via-cyan-500 to-blue-500 opacity-30 blur-[50px] sm:blur-[100px]" />
         
         {/* Card with gradient border */}
         <div className="relative p-[2px] rounded-lg bg-gradient-to-br from-teal-500 via-cyan-500 to-sky-600">
-          <div className="bg-black rounded-lg p-8 w-96 shadow-xl">
+          <div className="bg-black rounded-lg p-6 sm:p-8 w-full max-w-[90vw] sm:w-96 shadow-xl">
             <h2 className="text-2xl font-serif text-white text-center mb-6">Sign In</h2>
             
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -58,9 +64,14 @@ const SignInPage = () => {
 
               <button
                 type="submit"
-                className="w-full py-2 px-4 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition duration-200"
+                disabled={isLoading} // Disable button when loading
+                className="w-full py-2 px-4 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition duration-200 flex items-center justify-center"
               >
-                Sign In
+                {isLoading ? (
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+                ) : (
+                  'Sign In'
+                )}
               </button>
             </form>
 
