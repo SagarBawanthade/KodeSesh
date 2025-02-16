@@ -1,5 +1,6 @@
-import React from 'react';
+
 import { Code2, Users } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const IntroSection = () => {
   return (
@@ -57,19 +58,23 @@ const IntroSection = () => {
 
           {/* Buttons Container */}
           <div className="flex flex-wrap gap-4 justify-center">
+            <Link to="/code-editor-dashboard">
             <button className="flex items-center px-6 py-2.5 bg-cyan-500 hover:bg-cyan-600 
                              text-black font-medium rounded-lg transition-colors 
                              duration-300">
               <Code2 className="mr-2" size={20} />
               Create Session
             </button>
-            
+            </Link>
+
+            <Link to="/code-editor-dashboard">
             <button className="flex items-center px-6 py-2.5 border border-cyan-500 
                              text-white hover:bg-cyan-500/10 font-medium rounded-lg 
                              transition-colors duration-300">
               <Users className="mr-2" size={20} />
               Join Session
             </button>
+            </Link>
           </div>
         </div>
       </div>
