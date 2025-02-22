@@ -8,28 +8,23 @@ const HowItWorks = () => {
   const steps = [
     {
       number: 1,
-      title: 'Sign Up',
-      description: 'Create an account to get started. It’s quick and easy!',
+      title: 'SignIn/SignUp',
+      description: 'Create your account in seconds by providing a few basic details or using your social media login. Once registered, sign in securely to unlock the full potential of our platform.',
     },
     {
       number: 2,
-      title: 'Set Up Your Profile',
-      description: 'Add your details and preferences to personalize your experience.',
+      title: 'Create a Session, Code Your Way',
+      description: 'Begin with a session, and choose to work independently or invite collaborators. Experience real-time coding and seamless interaction through audio and video calls.',
     },
     {
       number: 3,
-      title: 'Explore Features',
-      description: 'Discover all the tools and features available to you.',
+      title: 'Connect with Your Team',
+      description: 'Stay connected with your team through high-quality audio and video calls, No matter where your team is located, audio and video calls bring everyone together, making remote collaboration as effective as working side by side.',
     },
     {
       number: 4,
-      title: 'Start Using',
-      description: 'Begin using the platform to achieve your goals.',
-    },
-    {
-      number: 5,
-      title: 'Get Results',
-      description: 'See the benefits and results of using our platform.',
+      title: 'Streamlined Code Collaboration',
+      description: 'Collaborators can raise pull requests to suggest code changes. The host receives a notification and reviews the request. If the changes align with the project goals, the host can approve and merge the code effortlessly.',
     },
   ];
 
