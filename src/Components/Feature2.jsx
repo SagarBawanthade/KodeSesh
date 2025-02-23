@@ -1,6 +1,5 @@
-import React from "react";
 import { motion } from "framer-motion";
-import unifiedImage from "/src/assets/images/UniImg.jpg"; 
+import unifiedImage from "/images/UniImg.jpg"; 
 
 const UnifiedPlatformSection = () => {
   return (

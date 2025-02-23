@@ -1,4 +1,3 @@
-import React from "react";
 
 const Features1 = () => {
   return (
@@ -57,7 +56,7 @@ const Features1 = () => {
 
             <div className="w-1/2 flex justify-center">
               <img
-                src="/src/assets/images/realtime.png"
+                src="/images/realtime.png"
                 alt="Realtime collaboration"
                 className="rounded-lg shadow-lg w-78 h-87 object-cover"
               />
@@ -118,7 +117,7 @@ const Features1 = () => {
 
             <div className="w-1/2 flex justify-center">
               <img
-                src="/src/assets/images/SH.jpeg"
+                src="/images/SH.jpeg"
                 alt="Syntax Highlighting"
                 className="rounded-lg shadow-lg w-84 h-78 object-cover"
               />

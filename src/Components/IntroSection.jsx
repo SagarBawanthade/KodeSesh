@@ -1,5 +1,4 @@
-import React from 'react';
-import { Code2, Users } from 'lucide-react';
+
 import { Link } from 'react-router-dom';
 
 const HeroSection = () => {
@@ -7,7 +6,7 @@ const HeroSection = () => {
     <div
       className="relative h-screen bg-cover bg-center flex items-center justify-start text-left"
       style={{
-        backgroundImage: `url('/src/assets/images/Hero01.jpg')`, 
+        backgroundImage: `url('/images/Hero01.jpg')`, 
       }}
     >
       <div className="absolute inset-0 bg-black bg-opacity-50"></div>
