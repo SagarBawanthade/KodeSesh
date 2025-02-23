@@ -1,5 +1,6 @@
 import React from 'react';
 import { Code2, Users } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const HeroSection = () => {
   return (
@@ -27,12 +28,12 @@ const HeroSection = () => {
         </p>
 
         <div className="space-x-4  ">
-        <button className="px-8 py-4 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition duration-300 text-xl">
+        <Link to="/code-editor-dashboard" className="px-8 py-4 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition duration-300 text-xl">
             Start Building 
-          </button>
-          <button className="px-8 py-4 border border-white text-white bg-transparent rounded-lg hover:bg-white hover:text-black transition duration-300 text-xl">
+          </Link>
+          <Link  to="/code-editor-dashboard" className="px-8 py-4 border border-white text-white bg-transparent rounded-lg hover:bg-white hover:text-black transition duration-300 text-xl">
             Collaborate 
-          </button>
+          </Link>
           
         </div>
       </div>
