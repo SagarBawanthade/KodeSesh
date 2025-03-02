@@ -56,12 +56,12 @@ const TestimonialsCarousel = () => {
   };
 
   return (
-    <div className="flex flex-col items-center min-h-screen bg-black py-12">
+    <div className="flex flex-col items-center h-60vh bg-black py-12 ">
       <h1 className="text-4xl font-bold mb-16 bg-gradient-to-r from-cyan-500 to-white bg-clip-text text-transparent">
         What Our Clients Say
       </h1>
       
-      <div className="relative w-full max-w-5xl h-96  ">
+      <div className="relative w-full max-w-5xl h-96 ">
         {testimonials.map((testimonial, index) => (
           <div
             key={testimonial.id}
