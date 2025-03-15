@@ -1,28 +1,60 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { toast } from 'react-toastify';
 
 const SignInPage = () => {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
-  const [isLoading, setIsLoading] = useState(false); // State for loading
-
-  const handleSubmit = (e) => {
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Handle OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const error = params.get('error');
+    
+    if (error) {
+      setError(error);
+    }
+  }, [location]);
+  
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true); // Start loading
+    setIsLoading(true);
+    setError(null);
 
-    // Simulate an async operation (e.g., API call)
-    setTimeout(() => {
-      console.log('Form submitted:', formData);
-      setIsLoading(false); // Stop loading after operation
-    }, 2000); // Simulate a 2-second delay
+    try {
+      const response = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      });
+      
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Something went wrong');
+      }
+      
+      localStorage.setItem('token', data.token);
+      toast.success('Login successful'); 
+      navigate('/code-editor-dashboard');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGithubLogin = () => {
+    window.location.href = 'http://localhost:5000/api/auth/github';
   };
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   return (
@@ -36,7 +68,7 @@ const SignInPage = () => {
         <div className="relative p-[2px] rounded-lg bg-gradient-to-br from-teal-500 via-cyan-500 to-sky-600">
           <div className="bg-black rounded-lg p-6 sm:p-8 w-full max-w-[90vw] sm:w-96 shadow-xl">
             <h2 className="text-2xl font-serif text-white text-center mb-6">Sign In</h2>
-            
+            {error && <p className="text-red-500 text-sm text-center mb-4">{error}</p>}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <input
@@ -64,7 +96,7 @@ const SignInPage = () => {
 
               <button
                 type="submit"
-                disabled={isLoading} // Disable button when loading
+                disabled={isLoading}
                 className="w-full py-2 px-4 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition duration-200 flex items-center justify-center"
               >
                 {isLoading ? (
@@ -87,6 +119,7 @@ const SignInPage = () => {
             {/* Social Login Buttons */}
             <div className="flex gap-4 px-4 sm:px-0">
               <button 
+                onClick={handleGithubLogin}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 font-serif sm:py-3 px-4 bg-gray-800 hover:bg-gray-700 text-white rounded-xl transition-all duration-200 shadow-lg hover:shadow-2xl hover:scale-105 hover:shadow-gray-700/30"
               >
                 {/* Github Icon */}

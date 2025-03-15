@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import axios from 'axios';
+import { toast } from 'react-toastify';
 
 const SignUpPage = () => {
   const [formData, setFormData] = useState({
@@ -7,10 +9,53 @@ const SignUpPage = () => {
     password: '',
     confirmPassword: ''
   });
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Form submitted:', formData);
+    setError('');
+    setSuccess('');
+    
+    // Validate passwords match
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      // Make API request to register endpoint
+      const response = await axios.post('http://localhost:5000/api/auth/register', {
+        name: formData.username,
+        email: formData.email,
+        password: formData.password
+      });
+
+      // Handle successful registration
+      setSuccess('Registration successful! Redirecting to login...');
+       toast.success('Registration successful:', response.data);
+      
+      // Store token if needed
+      localStorage.setItem('token', response.data.token);
+      
+      // Redirect to login or dashboard after a short delay
+      setTimeout(() => {
+        window.location.href = '/signin';
+      }, 2000);
+      
+    } catch (error) {
+      // Handle registration errors
+      if (error.response && error.response.data) {
+        setError(error.response.data.message || 'Registration failed');
+      } else {
+        setError('Network error. Please try again later.');
+      }
+      
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleChange = (e) => {
@@ -38,6 +83,12 @@ const SignUpPage = () => {
         <div className="relative p-[2px] rounded-lg bg-gradient-to-br from-teal-500 via-cyan-500 to-sky-600 w-full max-w-md mx-auto">
           <div className="bg-black rounded-lg p-4 sm:p-8 w-full shadow-xl">
             <h2 className="text-2xl sm:text-3xl font-serif  text-white text-center mb-6 tracking-tight">Create Account</h2>
+            
+            {/* Show error message if exists */}
+            
+            
+            {/* Show success message if exists */}
+            
             
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -90,9 +141,10 @@ const SignUpPage = () => {
 
               <button
                 type="submit"
-                className="w-full py-2 px-4 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-lg transition duration-200 font-semibold shadow-lg hover:shadow-cyan-500/25 text-sm font-serif sm:text-base"
+                disabled={isLoading}
+                className={`w-full py-2 px-4 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-lg transition duration-200 font-semibold shadow-lg hover:shadow-cyan-500/25 text-sm font-serif sm:text-base ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
-                Sign Up
+                {isLoading ? 'Signing Up...' : 'Sign Up'}
               </button>
             </form>
 
