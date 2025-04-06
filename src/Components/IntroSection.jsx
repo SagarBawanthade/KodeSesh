@@ -124,15 +124,22 @@ const HeroSection = () => {
   };
   return (
     <div
-      className="relative h-screen bg-cover bg-center flex items-center justify-start text-left"
-      style={{
-        backgroundImage: `url('/images/Hero01.jpg')`,
-      }}
+      className="relative h-[70vh] sm:h-screen bg-black sm:bg-[url('/images/Hero01.jpg')] sm:bg-cover sm:bg-center flex items-center justify-start text-left overflow-hidden"
     >
-      <div className="absolute inset-0 bg-black bg-opacity-60"></div>
+      {/* Gradient Background for Small Screens */}
+      <div className="absolute inset-0 bg-gradient-to-br from-cyan-500 via-black to-black sm:hidden"></div> 
+
+      {/* Semicircular Patch for Small Screens */}
+      <div className="absolute -top-20 -right-20 w-40 h-40 bg-#155e75 rounded-full sm:hidden"></div>
+      <div className="absolute -top-24 -right-24 w-48 h-48 bg-black rounded-full sm:hidden"></div>
       
-      <div className="relative z-10 text-white max-w-2xl px-8 ml-12 md:ml-16 sm:px-4 xs:mx-auto xs:text-center">
-        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
+      {/* Overlay */}
+      <div className="absolute inset-0 bg-black bg-opacity-50 sm:bg-opacity-50"></div>
+
+      {/* Content */}
+      <div className="relative z-10 text-white max-w-2xl px-4 sm:px-8 lg:px-12 mx-auto lg:ml-12">
+        {/* Heading */}
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold mb-4 sm:mb-6">
           Turn solo code{" "}
           <span className="inline-block">
             into{" "}

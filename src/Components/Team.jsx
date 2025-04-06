@@ -26,7 +26,7 @@ const TeamSection = () => {
   ];
 
   return (
-    <section className="bg-black min-h-screen flex flex-col items-center justify-start p-8">
+    <section className="hidden md:flex bg-black min-h-screen flex-col items-center justify-start p-8">
       <h1 className="text-5xl font-bold bg-gradient-to-r from-cyan-400 to-white bg-clip-text text-transparent mb-4">
         Meet our team
       </h1>
