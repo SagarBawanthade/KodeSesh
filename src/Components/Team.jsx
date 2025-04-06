@@ -1,19 +1,19 @@
-import React from 'react';
+
 
 const TeamSection = () => {
   const teamMembers = [
     {
       id: 1,
       name: 'Bhumika Chandwani',
-      role: 'Front-End developer',
-      bio: 'Android application developer, Front-End designer, Cloud Computing specializing in AWS services.',
+      role: 'FrontEnd developer',
+      bio: 'Android application & Web Developer, Front-End Designer, Cloud Computing specializing in AWS services.',
       image: '/images/Bhumika1.jpg', 
     },
     {
       id: 2,
       name: 'Sagar Bawanthade',
       role: 'Backend developer',
-      bio: 'Cloud & DevOps specializing in AWS, Kubernetes, Docker, automation, and scaling of cloud-native applications',
+      bio: 'Node JS, Cloud & DevOps specializing in AWS, Kubernetes, Docker, automation, and scaling of cloud-native applications',
       image: '/images/Sagar.jpeg', 
     },
     {

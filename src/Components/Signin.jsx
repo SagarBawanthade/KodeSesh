@@ -1,28 +1,64 @@
-import React, { useState } from 'react';
+// SignInPage.js
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { toast } from 'react-toastify';
+import { useDispatch, useSelector } from 'react-redux';
+import { clearError, loginUser } from '../store/userSlice';
 import Navbar from './Navbar'; 
+ 
 
 const SignInPage = () => {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
-  const [isLoading, setIsLoading] = useState(false); 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setIsLoading(true); 
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Fixed selectors to properly use useSelector
+  const isAuthenticated = useSelector((state) => state.user.isAuthenticated);
+  const isLoading = useSelector((state) => state.user.loading);
+  const error = useSelector((state) => state.user.error);
 
     
-    setTimeout(() => {
-      console.log('Form submitted:', formData);
-      setIsLoading(false); 
-    }, 2000); 
+  // Check if user is already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/');
+    }
+  }, [isAuthenticated, navigate]);
+  
+  // Handle OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const errorParam = params.get('error');
+    
+    if (errorParam) {
+      toast.error(errorParam);
+    }
+    
+    // Clear any previous errors when component mounts
+    dispatch(clearError());
+  }, [location, dispatch]);
+  
+  // Show error toast when error state changes
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    dispatch(loginUser(formData));
+    toast.success('Logged in successfully');
+    navigate('/');
+  };
+
+  const handleGithubLogin = () => {
+    window.location.href = 'http://localhost:5000/api/auth/github';
   };
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   return (
@@ -37,7 +73,7 @@ const SignInPage = () => {
         <div className="relative p-[2px] rounded-lg bg-gradient-to-br from-teal-500 via-cyan-500 to-sky-600">
           <div className="bg-black rounded-lg p-6 sm:p-8 w-full max-w-[90vw] sm:w-96 md:w-[450px] lg:w-[500px] xl:w-[550px] h-auto min-h-[400px] sm:min-h-[450px] md:min-h-[500px] flex flex-col justify-center shadow-xl">
             <h2 className="text-2xl font-serif text-white text-center mb-6">Sign In</h2>
-            
+            {error && <p className="text-red-500 text-sm text-center mb-4">{error}</p>}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <input
@@ -65,7 +101,7 @@ const SignInPage = () => {
 
               <button
                 type="submit"
-                disabled={isLoading} 
+                disabled={isLoading}
                 className="w-full py-2 px-4 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition duration-200 flex items-center justify-center"
               >
                 {isLoading ? (
@@ -87,6 +123,7 @@ const SignInPage = () => {
 
             <div className="flex gap-4 px-4 sm:px-0">
               <button 
+                onClick={handleGithubLogin}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 font-serif sm:py-3 px-4 bg-gray-800 hover:bg-gray-700 text-white rounded-xl transition-all duration-200 shadow-lg hover:shadow-2xl hover:scale-105 hover:shadow-gray-700/30"
               >
                 
@@ -124,5 +161,6 @@ const SignInPage = () => {
     </div>
   );
 };
+
 
 export default SignInPage;

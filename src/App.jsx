@@ -5,6 +5,7 @@ import SignInPage from './Components/Signin';
 import SignUpPage from './Components/Signup';
 import CodeEditorDashboard from './pages/CodeEditorDashboard';
 import DocumentationPage from './Components/Documentation';
+import AuthCallBack from './Components/AuthCallBack';
 
 function App() {
   return (
@@ -16,6 +17,8 @@ function App() {
           <Route path="/signup" element={<SignUpPage />} />
           <Route path="/code-editor-dashboard" element={<CodeEditorDashboard/>} />
           <Route path="/documentation" element={<DocumentationPage/>} /> 
+          <Route path="/code-editor-dashboard/:sessionId" element={<CodeEditorDashboard />} />
+          <Route path="/auth/callback" element={<AuthCallBack />} />
         </Routes>
       </div>
     </Router>
