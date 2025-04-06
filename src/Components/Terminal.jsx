@@ -1,97 +1,88 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronRight } from 'lucide-react';
 
-const Terminal = ({ isOpen, height }) => {
-  const [terminalHistory, setTerminalHistory] = useState([
-    { type: 'output', content: 'Welcome to KodeSesh Terminal' },
-    { type: 'output', content: 'Type "help" for available commands' },
-  ]);
-  const [currentCommand, setCurrentCommand] = useState('');
+const Terminal = ({ className, terminalHistory = [], onCommand = () => {} }) => {
+  const [command, setCommand] = useState('');
   const inputRef = useRef(null);
-  const historyRef = useRef(null);
+  const containerRef = useRef(null);
 
   useEffect(() => {
-    if (isOpen && inputRef.current) {
+    // Focus the input when the component mounts
+    if (inputRef.current) {
       inputRef.current.focus();
     }
-  }, [isOpen]);
+  }, []);
 
-  useEffect(() => {
-    if (historyRef.current) {
-      historyRef.current.scrollTop = historyRef.current.scrollHeight;
+  // Focus on input when clicking anywhere in the terminal
+  const handleContainerClick = () => {
+    if (inputRef.current) {
+      inputRef.current.focus();
     }
-  }, [terminalHistory]);
-
-  const handleCommandSubmit = (e) => {
-    e.preventDefault();
-    
-    if (!currentCommand.trim()) return;
-    
-    // Add command to history
-    setTerminalHistory(prev => [
-      ...prev, 
-      { type: 'input', content: `$ ${currentCommand}` }
-    ]);
-    
-    // Process command (simplified example)
-    const processedOutput = processCommand(currentCommand);
-    
-    // Add output to history
-    setTerminalHistory(prev => [
-      ...prev, 
-      { type: 'output', content: processedOutput }
-    ]);
-    
-    // Clear input
-    setCurrentCommand('');
   };
 
-  const processCommand = (cmd) => {
-    const command = cmd.trim().toLowerCase();
-    
-    if (command === 'help') {
-      return 'Available commands: help, clear, echo, version';
-    } else if (command === 'clear') {
-      setTimeout(() => {
-        setTerminalHistory([{ type: 'output', content: 'Terminal cleared' }]);
-      }, 0);
-      return '';
-    } else if (command === 'version') {
-      return 'KodeSesh Terminal v1.0.0';
-    } else if (command.startsWith('echo ')) {
-      return command.substring(5);
-    } else {
-      return `Command not found: ${command}`;
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (command.trim()) {
+      onCommand(command);
+      setCommand('');
     }
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#1a1a1a] text-sm">
-      <div 
-        ref={historyRef}
-        className="flex-1 p-2 overflow-y-auto font-mono text-gray-300"
-        style={{ height: `${height - 32}px` }}
-      >
-        {terminalHistory.map((item, index) => (
-          <div 
-            key={index} 
-            className={`mb-1 ${item.type === 'input' ? 'text-green-400' : 'text-gray-300'}`}
-          >
-            {item.content}
-          </div>
-        ))}
-      </div>
-      
-      <form onSubmit={handleCommandSubmit} className="flex border-t border-gray-800">
-        <span className="p-2 text-green-400 font-mono">$</span>
+    <div 
+      ref={containerRef}
+      onClick={handleContainerClick}
+      className={`font-mono text-sm ${className} bg-gradient-to-b from-[#0a0e1a] to-[#0d1326]`}
+      style={{
+        backgroundImage: `radial-gradient(circle at 50% 100%, rgba(16, 185, 219, 0.05) 0%, transparent 70%)`,
+        boxShadow: "inset 0 0 30px rgba(0, 0, 0, 0.5)"
+      }}
+    >
+      {/* Display terminal history */}
+      {terminalHistory.map((entry, index) => (
+        <div key={index} className="mb-2 last:mb-0 px-1">
+          {entry.type === 'input' && (
+            <div className="text-cyan-400 flex items-center">
+              <ChevronRight size={16} className="text-cyan-600 mr-1" />
+              <span>{entry.content}</span>
+            </div>
+          )}
+          {entry.type === 'output' && (
+            <div className="text-gray-300 whitespace-pre-wrap ml-6 border-l-2 border-cyan-900/30 pl-2">
+              {entry.content}
+            </div>
+          )}
+          {entry.type === 'error' && (
+            <div className="text-red-400 whitespace-pre-wrap ml-6 border-l-2 border-red-900/30 pl-2 bg-red-900/10 rounded-r">
+              {entry.content}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {/* Command input with animated cursor */}
+      <form onSubmit={handleSubmit} className="flex items-center px-1 mt-2">
+        <ChevronRight size={16} className="text-cyan-600 mr-1" />
         <input
           ref={inputRef}
           type="text"
-          value={currentCommand}
-          onChange={(e) => setCurrentCommand(e.target.value)}
-          className="flex-1 bg-transparent border-none outline-none p-2 text-gray-300 font-mono"
-          placeholder="Enter command..."
+          value={command}
+          onChange={(e) => setCommand(e.target.value)}
+          className="flex-1 bg-transparent outline-none text-cyan-100 caret-cyan-400 py-1"
+          autoFocus
+          style={{
+            animation: "cursor-blink 1.2s steps(1) infinite"
+          }}
         />
       </form>
+
+      {/* Add CSS for blinking cursor */}
+      <style jsx>{`
+        @keyframes cursor-blink {
+          0%, 100% { caret-color: transparent; }
+          50% { caret-color: rgb(34, 211, 238); }
+        }
+      `}</style>
     </div>
   );
 };

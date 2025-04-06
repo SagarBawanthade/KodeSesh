@@ -1,52 +1,54 @@
+// SignInPage.js
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { useDispatch, useSelector } from 'react-redux';
+import { clearError, loginUser } from '../store/userSlice';
+ 
 
 const SignInPage = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
+  
+  // Fixed selectors to properly use useSelector
+  const isAuthenticated = useSelector((state) => state.user.isAuthenticated);
+  const isLoading = useSelector((state) => state.user.loading);
+  const error = useSelector((state) => state.user.error);
+  
+  // Check if user is already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/');
+    }
+  }, [isAuthenticated, navigate]);
   
   // Handle OAuth callback
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const error = params.get('error');
+    const errorParam = params.get('error');
     
-    if (error) {
-      setError(error);
+    if (errorParam) {
+      toast.error(errorParam);
     }
-  }, [location]);
+    
+    // Clear any previous errors when component mounts
+    dispatch(clearError());
+  }, [location, dispatch]);
+  
+  // Show error toast when error state changes
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
   
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch('http://localhost:5000/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
-      });
-      
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Something went wrong');
-      }
-      
-      localStorage.setItem('token', data.token);
-      toast.success('Login successful'); 
-      navigate('/code-editor-dashboard');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsLoading(false);
-    }
+    dispatch(loginUser(formData));
+    toast.success('Logged in successfully');
+    navigate('/');
   };
 
   const handleGithubLogin = () => {
