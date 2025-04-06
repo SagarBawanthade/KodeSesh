@@ -1,21 +1,21 @@
 import React, { useState } from 'react';
+import Navbar from './Navbar'; 
 
 const SignInPage = () => {
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
-  const [isLoading, setIsLoading] = useState(false); // State for loading
-
+  const [isLoading, setIsLoading] = useState(false); 
   const handleSubmit = (e) => {
     e.preventDefault();
-    setIsLoading(true); // Start loading
+    setIsLoading(true); 
 
-    // Simulate an async operation (e.g., API call)
+    
     setTimeout(() => {
       console.log('Form submitted:', formData);
-      setIsLoading(false); // Stop loading after operation
-    }, 2000); // Simulate a 2-second delay
+      setIsLoading(false); 
+    }, 2000); 
   };
 
   const handleChange = (e) => {
@@ -26,15 +26,16 @@ const SignInPage = () => {
   };
 
   return (
-    <div className="relative w-full h-screen bg-black overflow-hidden">
+    <div className="relative w-full min-h-screen bg-black overflow-hidden">
+      {/* Navbar */}
+      <Navbar />
+
       {/* Card Container */}
-      <div className="relative z-10 w-full h-full flex items-center justify-center p-4">
-        {/* Gradient Background Square */}
-        <div className="absolute w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-gradient-to-br from-teal-400 via-cyan-500 to-blue-500 opacity-30 blur-[50px] sm:blur-[100px]" />
+      <div className="relative z-10 w-full min-h-[calc(100vh-56px)] flex items-center justify-center p-4">
+        <div className="absolute w-[300px] sm:w-[600px] lg:w-[800px] xl:w-[1000px] h-[300px] sm:h-[600px] lg:h-[800px] xl:h-[1000px] bg-gradient-to-br from-teal-400 via-cyan-500 to-blue-500 opacity-30 blur-[50px] sm:blur-[100px] lg:blur-[150px]" />
         
-        {/* Card with gradient border */}
         <div className="relative p-[2px] rounded-lg bg-gradient-to-br from-teal-500 via-cyan-500 to-sky-600">
-          <div className="bg-black rounded-lg p-6 sm:p-8 w-full max-w-[90vw] sm:w-96 shadow-xl">
+          <div className="bg-black rounded-lg p-6 sm:p-8 w-full max-w-[90vw] sm:w-96 md:w-[450px] lg:w-[500px] xl:w-[550px] h-auto min-h-[400px] sm:min-h-[450px] md:min-h-[500px] flex flex-col justify-center shadow-xl">
             <h2 className="text-2xl font-serif text-white text-center mb-6">Sign In</h2>
             
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -64,7 +65,7 @@ const SignInPage = () => {
 
               <button
                 type="submit"
-                disabled={isLoading} // Disable button when loading
+                disabled={isLoading} 
                 className="w-full py-2 px-4 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition duration-200 flex items-center justify-center"
               >
                 {isLoading ? (
@@ -84,12 +85,11 @@ const SignInPage = () => {
               </div>
             </div>
 
-            {/* Social Login Buttons */}
             <div className="flex gap-4 px-4 sm:px-0">
               <button 
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 font-serif sm:py-3 px-4 bg-gray-800 hover:bg-gray-700 text-white rounded-xl transition-all duration-200 shadow-lg hover:shadow-2xl hover:scale-105 hover:shadow-gray-700/30"
               >
-                {/* Github Icon */}
+                
                 <svg className="w-6 h-5 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
                 </svg>
@@ -97,7 +97,7 @@ const SignInPage = () => {
               <button 
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-4 bg-gray-800 hover:bg-gray-700 text-white rounded-xl transition-all duration-200 shadow-lg hover:shadow-2xl hover:scale-105 hover:shadow-gray-700/30"
               >
-                {/* Google Icon */}
+                
                 <svg className="w-6 h-5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                   <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>

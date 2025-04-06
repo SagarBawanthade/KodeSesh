@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from "react-router-dom";
 import { Button } from "./Button";
 
 const Navbar = () => {
@@ -7,7 +7,7 @@ const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const navItems = [
-    { label: "Docs", href: "/docs" },
+    { label: "Docs", href: "./documentation" },
     { label: "Blog", href: "/blog" },
     { label: "About", href: "/about" },
   ];
@@ -15,7 +15,7 @@ const Navbar = () => {
   return (
     <div className="relative">
       <nav className="w-full h-14 border-b border-gray-800 bg-black shadow-lg shadow-cyan-500/50">
-        <div className="h-full max-w-7xl mx-auto px-0 flex items-center justify-between">
+        <div className="h-full max-w-11xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
           {/* Logo and Site Name */}
           <div className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-gray-800 rounded-md flex items-center justify-center">
@@ -25,8 +25,9 @@ const Navbar = () => {
           </div>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center">
-            <div className="flex items-center space-x-6 mr-8">
+          <div className="hidden md:flex items-center flex-1 justify-between ml-8">
+            {/* Navigation Items */}
+            <div className="flex items-center space-x-6">
               {navItems.map((item) => (
                 <button
                   key={item.label}
@@ -37,6 +38,8 @@ const Navbar = () => {
                 </button>
               ))}
             </div>
+
+            {/* Buttons */}
             <div className="flex items-center space-x-4">
               <Button variant="ghost" onClick={() => navigate("/signin")}>
                 Sign In
@@ -45,6 +48,7 @@ const Navbar = () => {
             </div>
           </div>
 
+          {/* Mobile Menu Toggle Button */}
           <button
             className="md:hidden text-white"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -77,8 +81,9 @@ const Navbar = () => {
         </div>
       </nav>
 
+      {/* Mobile Menu */}
       {isMenuOpen && (
-        <div className="absolute right-4 top-16 w-48 bg-black border border-gray-800 rounded-md shadow-lg md:hidden z-50">
+        <div className="absolute right-0 top-14 w-full bg-black border-b border-gray-800 shadow-lg md:hidden z-50">
           <div className="py-2">
             {navItems.map((item) => (
               <button
@@ -121,4 +126,3 @@ const Navbar = () => {
 };
 
 export default Navbar;
-

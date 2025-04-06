@@ -4,6 +4,7 @@ import Homepage from './Homepage';
 import SignInPage from './Components/Signin';
 import SignUpPage from './Components/Signup';
 import CodeEditorDashboard from './pages/CodeEditorDashboard';
+import DocumentationPage from './Components/Documentation';
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
           <Route path="/signin" element={<SignInPage />} />
           <Route path="/signup" element={<SignUpPage />} />
           <Route path="/code-editor-dashboard" element={<CodeEditorDashboard/>} />
+          <Route path="/documentation" element={<DocumentationPage/>} /> 
         </Routes>
       </div>
     </Router>

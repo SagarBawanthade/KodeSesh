@@ -49,19 +49,20 @@ const TestimonialsCarousel = () => {
     const isCentered = position === 1;
     
     return `
-      absolute w-80 p-6 rounded-lg shadow-lg bg-slate-950
+      absolute w-72 md:w-80 lg:w-96 p-6 rounded-lg shadow-lg bg-slate-950
       transition-all duration-500 ease-in-out
       ${isCentered ? 'border-2 border-cyan-400 shadow-cyan-400/50 z-20 scale-105' : 'border-2 border-gray-200 z-10'}
     `;
   };
 
   return (
-    <div className="flex flex-col items-center h-60vh bg-black py-12 ">
-      <h1 className="text-4xl font-bold mb-16 bg-gradient-to-r from-cyan-500 to-white bg-clip-text text-transparent">
+    <div className="flex flex-col items-center min-h-screen bg-black py-12">
+      <h1 className="text-3xl md:text-4xl font-bold mb-8 md:mb-16 bg-gradient-to-r from-cyan-500 to-white bg-clip-text text-transparent">
         What Our Clients Say
       </h1>
       
-      <div className="relative w-full max-w-5xl h-96 ">
+      {/* Carousel Container for Larger Screens */}
+      <div className="hidden md:block relative w-full max-w-5xl h-96 md:h-120 lg:h-144">
         {testimonials.map((testimonial, index) => (
           <div
             key={testimonial.id}
@@ -72,12 +73,36 @@ const TestimonialsCarousel = () => {
               <img
                 src={testimonial.image}
                 alt={testimonial.name}
-                className="w-20 h-20 rounded-full border-4 border-white shadow-lg"
+                className="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-white shadow-lg"
               />
             </div>
-            <p className="text-white mb-4">{testimonial.content}</p>
+            <p className="text-white mb-4 text-sm md:text-base">{testimonial.content}</p>
             <div className="mt-4">
-              <p className="font-semibold text-white">{testimonial.name}</p>
+              <p className="font-semibold text-white text-lg md:text-xl">{testimonial.name}</p>
+              <p className="text-gray-300 text-sm md:text-base">{testimonial.role}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Stacked Layout for Mobile Screens */}
+      <div className="md:hidden flex flex-col items-center space-y-8 pt-10 ">
+        {testimonials.map((testimonial) => (
+          <div
+            key={testimonial.id}
+            className="w-72 p-6 rounded-lg shadow-lg bg-slate-950 border-2 border-cyan-400 shadow-cyan-400/50"
+          >
+            {/* Circular Image */}
+            <div className="flex justify-center -mt-16 mb-4">
+              <img
+                src={testimonial.image}
+                alt={testimonial.name}
+                className="w-16 h-16 rounded-full border-4 border-white shadow-lg"
+              />
+            </div>
+            <p className="text-white mb-4 text-sm">{testimonial.content}</p>
+            <div className="mt-4">
+              <p className="font-semibold text-white text-lg">{testimonial.name}</p>
               <p className="text-gray-300 text-sm">{testimonial.role}</p>
             </div>
           </div>

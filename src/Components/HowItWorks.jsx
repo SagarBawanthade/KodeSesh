@@ -35,11 +35,11 @@ const HowItWorks = () => {
 
   return (
     <section className="how-it-works">
-      <h2 className="text-5xl font-bold text-center mb-12">
-      <span className="bg-gradient-to-r from-cyan-500 to-white bg-clip-text text-transparent">
-              How it Works
-            </span>
-        </h2>
+      <h2 className="text-3xl md:text-5xl font-bold text-center mb-8 md:mb-12">
+        <span className="bg-gradient-to-r from-cyan-500 to-white bg-clip-text text-transparent">
+          How it Works
+        </span>
+      </h2>
       <div className="timeline-container">
         <div
           ref={lineRef}
@@ -70,7 +70,7 @@ const HowItWorks = () => {
                 className={`message-box ${index % 2 === 0 ? 'left' : 'right'}`}
               >
                 <h3>{step.title}</h3>
-                <p>{step.description}</p>
+                <p className="mobile-hidden">{step.description}</p>
               </div>
             </div>
           );
