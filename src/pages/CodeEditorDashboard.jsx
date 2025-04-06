@@ -27,77 +27,10 @@ const CodeEditorDashboard = () => {
 
   // Set default code templates based on language
   const codeTemplates = {
-    javascript: `// JavaScript Example
-function findPrimeNumbers(n) {
-  // Function to check if a number is prime
-  function isPrime(num) {
-    if (num <= 1) return false;
-    if (num <= 3) return true;
-    
-    if (num % 2 === 0 || num % 3 === 0) return false;
-    
-    let i = 5;
-    while (i * i <= num) {
-      if (num % i === 0 || num % (i + 2) === 0) return false;
-      i += 6;
-    }
-    return true;
-  }
-  
-  // Find first n prime numbers
-  const primes = [];
-  let num = 2;
-  
-  while (primes.length < n) {
-    if (isPrime(num)) {
-      primes.push(num);
-    }
-    num++;
-  }
-  
-  return primes;
-}
-
-// Test the function
-const n = 10;
-const result = findPrimeNumbers(n);
-console.log(\`First \${n} prime numbers: \${result.join(', ')}\`);
+    javascript: `console.log("Hello World");
 `,
-    python: `# Python Example
-def find_prime_numbers(n):
-    """Function to find the first n prime numbers"""
-    # Function to check if a number is prime
-    def is_prime(num):
-        if num <= 1:
-            return False
-        if num <= 3:
-            return True
-            
-        if num % 2 == 0 or num % 3 == 0:
-            return False
-            
-        i = 5
-        while i * i <= num:
-            if num % i == 0 or num % (i + 2) == 0:
-                return False
-            i += 6
-        return True
-    
-    # Find first n prime numbers
-    primes = []
-    num = 2
-    
-    while len(primes) < n:
-        if is_prime(num):
-            primes.append(num)
-        num += 1
-    
-    return primes
+    python: `print("Hello World")
 
-# Test the function
-n = 10
-result = find_prime_numbers(n)
-print(f"First {n} prime numbers: {result}")
 `
   };
 
@@ -421,17 +354,19 @@ const executeCode = async () => {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Editor Header */}
           <div className="bg-gradient-to-r from-[#0f172a]/90 to-[#1e293b]/90 backdrop-blur-md border-b border-cyan-900/30 shadow-lg z-20">
-            <EditorHeader 
-              isSidebarOpen={isSidebarOpen}
-              setIsSidebarOpen={setIsSidebarOpen}
-              isTerminalOpen={isTerminalOpen}
-              toggleTerminal={toggleTerminal}
-              selectedFile={selectedFile}
-              isCallPanelOpen={isCallPanelOpen}
-              setIsCallPanelOpen={setIsCallPanelOpen}
-              participantsCount={activeParticipants.length}
-              currentLanguage={currentLanguage}
-              setCurrentLanguage={setCurrentLanguage}
+          <EditorHeader 
+  isSidebarOpen={isSidebarOpen}
+  setIsSidebarOpen={setIsSidebarOpen}
+  isTerminalOpen={isTerminalOpen}
+  toggleTerminal={toggleTerminal}
+  selectedFile={selectedFile}
+  isCallPanelOpen={isCallPanelOpen}
+  setIsCallPanelOpen={setIsCallPanelOpen}
+  participantsCount={activeParticipants.length}
+  currentLanguage={currentLanguage}
+  setCurrentLanguage={setCurrentLanguage}
+  executeCode={executeCode}    
+  isExecuting={isExecuting}     
             />
           </div>
 
@@ -450,37 +385,7 @@ const executeCode = async () => {
                   </div>
                 </div>
                 
-                {/* Glowing Cursor Effect (Visual only) */}
-                <div className="absolute left-16 top-6 w-2 h-4 bg-cyan-400 rounded-sm opacity-75 shadow-[0_0_10px_#38bdf8] animate-pulse"></div>
-                
-                {/* Execute Code Button */}
-                <div className="absolute right-4 top-4 z-10">
-                  <button
-                    onClick={executeCode}
-                    disabled={isExecuting}
-                    className={`bg-gradient-to-r ${isExecuting 
-                      ? 'from-gray-500 to-gray-600 cursor-not-allowed' 
-                      : 'from-green-500 to-green-600 hover:from-green-600 hover:to-green-700'
-                    } text-white font-medium px-4 py-2 rounded-md shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2`}
-                  >
-                    {isExecuting ? (
-                      <>
-                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Running...
-                      </>
-                    ) : (
-                      <>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                        </svg>
-                        Run Code
-                      </>
-                    )}
-                  </button>
-                </div>
+              
                 
                 {/* Editor Content */}
                 <div className={`h-full ${isTerminalOpen ? 'border-b border-indigo-900/30' : ''}`}>
