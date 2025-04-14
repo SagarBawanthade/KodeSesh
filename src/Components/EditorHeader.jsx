@@ -11,8 +11,10 @@ const EditorHeader = ({
   participantsCount,
   currentLanguage,
   setCurrentLanguage,
-  executeCode,   // Add this prop
-  isExecuting    // Add this prop
+  executeCode,
+  isExecuting,
+  socket,             // Add socket prop
+  activeSessionId     // Add sessionId prop
 }) => {
   // Languages we support
   const supportedLanguages = [
@@ -22,6 +24,21 @@ const EditorHeader = ({
 
   // Get language info for displaying icon/name
   const currentLangInfo = supportedLanguages.find(lang => lang.id === currentLanguage) || supportedLanguages[0];
+
+  // Handle language change with socket broadcast
+  const handleLanguageChange = (e) => {
+    const newLanguage = e.target.value;
+    setCurrentLanguage(newLanguage);
+    
+    // Broadcast language change to all participants if socket exists
+    if (socket && socket.connected) {
+      console.log("Broadcasting language change:", newLanguage);
+      socket.emit("languageUpdate", { 
+        sessionId: activeSessionId, 
+        language: newLanguage 
+      });
+    }
+  };
 
   return (
     <div className="h-12 bg-gradient-to-r from-gray-900/80 to-gray-800/80 border-b border-cyan-800/30 flex items-center px-4 justify-between shadow-md backdrop-blur-md">
@@ -51,7 +68,7 @@ const EditorHeader = ({
             
             <select
               value={currentLanguage}
-              onChange={(e) => setCurrentLanguage(e.target.value)}
+              onChange={handleLanguageChange} // Use our modified handler
               className="absolute bg-slate-950 inset-0 opacity-0 cursor-pointer w-full"
             >
               {supportedLanguages.map(lang => (

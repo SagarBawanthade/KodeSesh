@@ -64,6 +64,9 @@ const CodeEditorDashboard = () => {
       
       // Request current participants
       newSocket.emit("getParticipants", activeSessionId);
+
+      // Request current language state from server/host
+      newSocket.emit("getLanguageState", activeSessionId);
     });
     
     // Listen for code updates
@@ -72,12 +75,25 @@ const CodeEditorDashboard = () => {
       setCode(updatedCode);
     });
     
-    // Listen for language updates
-    newSocket.on("languageUpdate", (updatedLanguage) => {
+    // Listen for language updates (enhanced)
+    newSocket.on("languageUpdate", (data) => {
+      const updatedLanguage = typeof data === 'object' ? data.language : data;
       console.log("Received language update:", updatedLanguage);
-      setCurrentLanguage(updatedLanguage);
-      // Update the selected file extension based on the new language
-      updateFileExtension(updatedLanguage);
+      
+      if (updatedLanguage && supportedLanguages.includes(updatedLanguage)) {
+        setCurrentLanguage(updatedLanguage);
+        
+        // Update the code to match the language template if it's empty or just has the default
+        const isDefaultJsCode = code === codeTemplates.javascript || code === "// Start writing your code here!";
+        const isDefaultPyCode = code === codeTemplates.python;
+        
+        if (isDefaultJsCode || isDefaultPyCode) {
+          setCode(codeTemplates[updatedLanguage]);
+        }
+        
+        // Update file extension
+        updateFileExtension(updatedLanguage);
+      }
     });
     
     // Listen for code execution results from other users
@@ -117,6 +133,9 @@ const CodeEditorDashboard = () => {
     };
   }, [activeSessionId, isTerminalOpen]);
 
+  // List of supported languages
+  const supportedLanguages = ["javascript", "python"];
+
   // Initialize code based on selected language
   useEffect(() => {
     // Set initial code based on language
@@ -124,12 +143,7 @@ const CodeEditorDashboard = () => {
     
     // Update file extension
     updateFileExtension(currentLanguage);
-    
-    // Broadcast language change if socket exists
-    if (socket) {
-      socket.emit("languageUpdate", { sessionId: activeSessionId, language: currentLanguage });
-    }
-  }, [currentLanguage]);
+  }, []);
 
   // Update file extension based on language
   const updateFileExtension = (language) => {
@@ -181,6 +195,16 @@ const CodeEditorDashboard = () => {
     }
   };
 
+  // This effect runs when currentLanguage changes from any source
+  useEffect(() => {
+    if (socket && socket.connected) {
+      console.log("Language changed to:", currentLanguage);
+      
+      // Update file extension
+      updateFileExtension(currentLanguage);
+    }
+  }, [currentLanguage]);
+
   const toggleAudio = () => {
     setIsAudioOn(!isAudioOn);
     setActiveParticipants(prev => 
@@ -196,75 +220,74 @@ const CodeEditorDashboard = () => {
   };
   
   // External API code execution
-  // External API code execution
-const executeCode = async () => {
-  if (isExecuting) return;
-  
-  // Add a message to the terminal indicating code execution
-  setTerminalOutput(prev => [...prev, 
-    { type: 'input', content: `run ${currentLanguage === 'javascript' ? 'main.js' : 'main.py'}` },
-    { type: 'output', content: 'Executing code...' }
-  ]);
-  
-  // Ensure terminal is open
-  if (!isTerminalOpen) {
-    setIsTerminalOpen(true);
-  }
-  
-  // Set executing state
-  setIsExecuting(true);
-  
-  try {
-    // Map our language identifiers to the API's expected values
-    const apiLanguage = {
-      'javascript': 'javascript',
-      'python': 'python3'
-    }[currentLanguage];
+  const executeCode = async () => {
+    if (isExecuting) return;
     
-    // Call the execution API
-    const result = await executeCodeWithExternalAPI(code, apiLanguage);
-    
-    // Parse API response
-    let output = '';
-    let error = '';
-    
-    if (result.run) {
-      output = result.run.stdout || '';
-      error = result.run.stderr || '';
-    } else {
-      output = result.output || '';
-      error = result.error || '';
-    }
-    
-    // Add output to terminal
-    if (output) {
-      setTerminalOutput(prev => [...prev, { type: 'output', content: output }]);
-    }
-    
-    // Add error to terminal if present
-    if (error) {
-      setTerminalOutput(prev => [...prev, { type: 'error', content: error }]);
-    }
-    
-    // Share result with other users via socket
-    if (socket) {
-      socket.emit("executionResult", { 
-        sessionId: activeSessionId, 
-        output: output,
-        error: error
-      });
-    }
-  } catch (error) {
-    console.error("Code execution error:", error);
+    // Add a message to the terminal indicating code execution
     setTerminalOutput(prev => [...prev, 
-      { type: 'error', content: `Error executing code: ${error.message}` }
+      { type: 'input', content: `run ${currentLanguage === 'javascript' ? 'main.js' : 'main.py'}` },
+      { type: 'output', content: 'Executing code...' }
     ]);
-  } finally {
-    setIsExecuting(false);
-  }
-};
+    
+    // Ensure terminal is open
+    if (!isTerminalOpen) {
+      setIsTerminalOpen(true);
+    }
+    
+    // Set executing state
+    setIsExecuting(true);
+    
+    try {
+      // Map our language identifiers to the API's expected values
+      const apiLanguage = {
+        'javascript': 'javascript',
+        'python': 'python3'
+      }[currentLanguage];
+      
+      // Call the execution API
+      const result = await executeCodeWithExternalAPI(code, apiLanguage);
+      
+      // Parse API response
+      let output = '';
+      let error = '';
+      
+      if (result.run) {
+        output = result.run.stdout || '';
+        error = result.run.stderr || '';
+      } else {
+        output = result.output || '';
+        error = result.error || '';
+      }
+      
+      // Add output to terminal
+      if (output) {
+        setTerminalOutput(prev => [...prev, { type: 'output', content: output }]);
+      }
+      
+      // Add error to terminal if present
+      if (error) {
+        setTerminalOutput(prev => [...prev, { type: 'error', content: error }]);
+      }
+      
+      // Share result with other users via socket
+      if (socket) {
+        socket.emit("executionResult", { 
+          sessionId: activeSessionId, 
+          output: output,
+          error: error
+        });
+      }
+    } catch (error) {
+      console.error("Code execution error:", error);
+      setTerminalOutput(prev => [...prev, 
+        { type: 'error', content: `Error executing code: ${error.message}` }
+      ]);
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+  
   // Function to execute code using external API
- 
   const PISTON_API_URL = 'https://emkc.org/api/v2/piston';
 
   const executeCodeWithExternalAPI = async (code, language) => {
@@ -355,19 +378,21 @@ const executeCode = async () => {
           {/* Editor Header */}
           <div className="bg-gradient-to-r from-[#0f172a]/90 to-[#1e293b]/90 backdrop-blur-md border-b border-cyan-900/30 shadow-lg z-20">
           <EditorHeader 
-  isSidebarOpen={isSidebarOpen}
-  setIsSidebarOpen={setIsSidebarOpen}
-  isTerminalOpen={isTerminalOpen}
-  toggleTerminal={toggleTerminal}
-  selectedFile={selectedFile}
-  isCallPanelOpen={isCallPanelOpen}
-  setIsCallPanelOpen={setIsCallPanelOpen}
-  participantsCount={activeParticipants.length}
-  currentLanguage={currentLanguage}
-  setCurrentLanguage={setCurrentLanguage}
-  executeCode={executeCode}    
-  isExecuting={isExecuting}     
-            />
+            isSidebarOpen={isSidebarOpen}
+            setIsSidebarOpen={setIsSidebarOpen}
+            isTerminalOpen={isTerminalOpen}
+            toggleTerminal={toggleTerminal}
+            selectedFile={selectedFile}
+            isCallPanelOpen={isCallPanelOpen}
+            setIsCallPanelOpen={setIsCallPanelOpen}
+            participantsCount={activeParticipants.length}
+            currentLanguage={currentLanguage}
+            setCurrentLanguage={setCurrentLanguage}
+            executeCode={executeCode}    
+            isExecuting={isExecuting}
+            socket={socket}               // Pass socket to EditorHeader
+            activeSessionId={activeSessionId} // Pass sessionId to EditorHeader
+          />
           </div>
 
           {/* Main Content with Editor and Call Panel */}
@@ -384,8 +409,6 @@ const executeCode = async () => {
                     ))}
                   </div>
                 </div>
-                
-              
                 
                 {/* Editor Content */}
                 <div className={`h-full ${isTerminalOpen ? 'border-b border-indigo-900/30' : ''}`}>
