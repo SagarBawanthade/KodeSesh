@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { io } from "socket.io-client";
 import FileExplorer from '../components/FileExplorer';
 import EditorHeader from '../components/EditorHeader';
@@ -20,11 +20,15 @@ const CodeEditorDashboard = () => {
   const [terminalHeight, setTerminalHeight] = useState(200);
   const [terminalOutput, setTerminalOutput] = useState([]);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [activeParticipants, setActiveParticipants] = useState([
+    { id: 1, name: "You", isHost: true, isMuted: false, isVideoOff: false },
+  ]);
+  const [socket, setSocket] = useState(null);
+  
   const navigate = useNavigate();
   const { sessionId } = useParams();
-  const activeSessionId = sessionId || "demo-session";  
-  const [socket, setSocket] = useState(null);
-
+  const activeSessionId = sessionId || "demo-session";
+  
   // Set default code templates based on language
   const codeTemplates = {
     javascript: `console.log("Hello World");
@@ -54,12 +58,14 @@ const CodeEditorDashboard = () => {
       
       // Join as a participant
       const userId = localStorage.getItem("userId") || Date.now().toString();
+      localStorage.setItem("userId", userId); // Ensure userId is saved
       const userName = localStorage.getItem("userName") || "Anonymous";
       
       newSocket.emit("userJoined", {
         userId,
         name: userName,
-        isHost: !sessionId // If no sessionId in URL, treat as host
+        isHost: !sessionId, // If no sessionId in URL, treat as host
+        sessionId: activeSessionId
       });
       
       // Request current participants
@@ -99,9 +105,16 @@ const CodeEditorDashboard = () => {
     // Listen for code execution results from other users
     newSocket.on("executionResult", (result) => {
       console.log("Received execution result:", result);
-      setTerminalOutput(prev => [...prev, 
-        { type: 'output', content: result.output }
-      ]);
+      if (result.terminalEntries) {
+        // Handle full terminal entries
+        setTerminalOutput(prev => [...prev, ...result.terminalEntries]);
+      } else {
+        // Handle basic output format
+        setTerminalOutput(prev => [...prev, 
+          { type: 'output', content: result.output }
+        ]);
+      }
+      
       // Ensure terminal is open to show the results
       if (!isTerminalOpen) {
         setIsTerminalOpen(true);
@@ -111,17 +124,82 @@ const CodeEditorDashboard = () => {
     // Listen for participants updates
     newSocket.on("participantsList", (participants) => {
       console.log("Received participants list:", participants);
-      setActiveParticipants(participants);
+      
+      // Add our own participant if not already included
+      const userId = localStorage.getItem("userId");
+      const ownParticipant = participants.find(p => p.id.toString() === userId);
+      
+      if (!ownParticipant) {
+        const myParticipant = {
+          id: userId,
+          name: localStorage.getItem("userName") || "You",
+          isHost: !sessionId,
+          isMuted: !isAudioOn,
+          isVideoOff: !isVideoOn
+        };
+        setActiveParticipants([myParticipant, ...participants]);
+      } else {
+        setActiveParticipants(participants);
+      }
     });
     
+    // Listen for participant join
     newSocket.on("participantJoined", (participant) => {
       console.log("Participant joined:", participant);
-      setActiveParticipants(prev => [...prev, participant]);
+      setActiveParticipants(prev => {
+        // Check if participant already exists
+        const exists = prev.some(p => p.id.toString() === participant.id.toString());
+        if (exists) {
+          return prev.map(p => p.id.toString() === participant.id.toString() ? participant : p);
+        }
+        // Add new participant
+        return [...prev, participant];
+      });
+      
+      // If this is a new participant and we're the host, initiate WebRTC
+      if (participant.id.toString() !== localStorage.getItem("userId")) {
+        newSocket.emit("rtcNewParticipant", {
+          sessionId: activeSessionId,
+          participantId: participant.id
+        });
+      }
     });
     
+    // Listen for participant leave
     newSocket.on("participantLeft", (participantId) => {
       console.log("Participant left:", participantId);
       setActiveParticipants(prev => prev.filter(p => p.id !== participantId));
+    });
+    
+    // Listen for audio toggle events
+    newSocket.on("audioToggled", ({ userId, isMuted }) => {
+      console.log(`Participant ${userId} audio toggled, muted: ${isMuted}`);
+      setActiveParticipants(prev => 
+        prev.map(p => p.id.toString() === userId.toString() ? {...p, isMuted} : p)
+      );
+    });
+    
+    // Listen for video toggle events
+    newSocket.on("videoToggled", ({ userId, isVideoOff }) => {
+      console.log(`Participant ${userId} video toggled, off: ${isVideoOff}`);
+      setActiveParticipants(prev => 
+        prev.map(p => p.id.toString() === userId.toString() ? {...p, isVideoOff} : p)
+      );
+    });
+    
+    // Listen for screen sharing events
+    newSocket.on("screenSharingStarted", ({ userId }) => {
+      console.log(`Participant ${userId} started screen sharing`);
+      setActiveParticipants(prev => 
+        prev.map(p => p.id.toString() === userId.toString() ? {...p, isScreenSharing: true} : p)
+      );
+    });
+    
+    newSocket.on("screenSharingEnded", ({ userId }) => {
+      console.log(`Participant ${userId} ended screen sharing`);
+      setActiveParticipants(prev => 
+        prev.map(p => p.id.toString() === userId.toString() ? {...p, isScreenSharing: false} : p)
+      );
     });
     
     // Clean up on unmount
@@ -131,7 +209,7 @@ const CodeEditorDashboard = () => {
         newSocket.disconnect();
       }
     };
-  }, [activeSessionId, isTerminalOpen]);
+  }, [activeSessionId]);
 
   // List of supported languages
   const supportedLanguages = ["javascript", "python"];
@@ -143,6 +221,15 @@ const CodeEditorDashboard = () => {
     
     // Update file extension
     updateFileExtension(currentLanguage);
+    
+    // Initialize user info
+    if (!localStorage.getItem("userId")) {
+      localStorage.setItem("userId", Date.now().toString());
+    }
+    
+    if (!localStorage.getItem("userName")) {
+      localStorage.setItem("userName", "Anonymous");
+    }
   }, []);
 
   // Update file extension based on language
@@ -155,12 +242,21 @@ const CodeEditorDashboard = () => {
     setSelectedFile(`main.${extensions[language]}`);
   };
 
-  // Participants data
-  const [activeParticipants, setActiveParticipants] = useState([
-    { id: 1, name: "You", isHost: true, isMuted: false, isVideoOff: false },
-    { id: 2, name: "John Doe", isHost: false, isMuted: true, isVideoOff: false },
-    { id: 3, name: "Jane Smith", isHost: false, isMuted: false, isVideoOff: true }
-  ]);
+  // This effect runs when currentLanguage changes from any source
+  useEffect(() => {
+    if (socket && socket.connected) {
+      console.log("Language changed to:", currentLanguage);
+      
+      // Update file extension
+      updateFileExtension(currentLanguage);
+      
+      // Broadcast language change to other participants
+      socket.emit("languageUpdate", {
+        sessionId: activeSessionId,
+        language: currentLanguage
+      });
+    }
+  }, [currentLanguage]);
 
   // Simulated file structure
   const fileStructure = {
@@ -189,45 +285,71 @@ const CodeEditorDashboard = () => {
 
   const handleCodeChange = (newCode) => {
     setCode(newCode);
-    if (socket) {
+    if (socket && socket.connected) {
       console.log("Sending code update for session:", activeSessionId);
       socket.emit("codeUpdate", { sessionId: activeSessionId, code: newCode });
     }
   };
 
-  // This effect runs when currentLanguage changes from any source
-  useEffect(() => {
-    if (socket && socket.connected) {
-      console.log("Language changed to:", currentLanguage);
-      
-      // Update file extension
-      updateFileExtension(currentLanguage);
-    }
-  }, [currentLanguage]);
-
   const toggleAudio = () => {
-    setIsAudioOn(!isAudioOn);
+    const newAudioState = !isAudioOn;
+    setIsAudioOn(newAudioState);
+    
+    // Update local participant state
+    const userId = localStorage.getItem("userId");
     setActiveParticipants(prev => 
-      prev.map(p => p.id === 1 ? {...p, isMuted: !isAudioOn} : p)
+      prev.map(p => p.id.toString() === userId ? {...p, isMuted: !newAudioState} : p)
     );
+    
+    // Notify other participants via socket if connected
+    if (socket && socket.connected) {
+      socket.emit("audioToggled", {
+        sessionId: activeSessionId,
+        userId,
+        isMuted: !newAudioState
+      });
+    }
   };
 
   const toggleVideo = () => {
-    setIsVideoOn(!isVideoOn);
+    const newVideoState = !isVideoOn;
+    setIsVideoOn(newVideoState);
+    
+    // Update local participant state
+    const userId = localStorage.getItem("userId");
     setActiveParticipants(prev => 
-      prev.map(p => p.id === 1 ? {...p, isVideoOff: !isVideoOn} : p)
+      prev.map(p => p.id.toString() === userId ? {...p, isVideoOff: !newVideoState} : p)
     );
+    
+    // Notify other participants via socket if connected
+    if (socket && socket.connected) {
+      socket.emit("videoToggled", {
+        sessionId: activeSessionId,
+        userId,
+        isVideoOff: !newVideoState
+      });
+    }
   };
   
   // External API code execution
   const executeCode = async () => {
     if (isExecuting) return;
     
-    // Add a message to the terminal indicating code execution
-    setTerminalOutput(prev => [...prev, 
-      { type: 'input', content: `run ${currentLanguage === 'javascript' ? 'main.js' : 'main.py'}` },
-      { type: 'output', content: 'Executing code...' }
-    ]);
+    // Create a command entry for terminal history
+    const commandEntry = { 
+      type: 'input', 
+      content: `run ${currentLanguage === 'javascript' ? 'main.js' : 'main.py'}` 
+    };
+    
+    // Add loading message entry
+    const loadingEntry = { 
+      type: 'output', 
+      content: 'Executing code...' 
+    };
+    
+    // Update local terminal with command and loading message
+    const updatedHistory = [...terminalOutput, commandEntry, loadingEntry];
+    setTerminalOutput(updatedHistory);
     
     // Ensure terminal is open
     if (!isTerminalOpen) {
@@ -259,29 +381,55 @@ const CodeEditorDashboard = () => {
         error = result.error || '';
       }
       
-      // Add output to terminal
+      // Create result entries
+      const resultEntries = [];
+      
       if (output) {
-        setTerminalOutput(prev => [...prev, { type: 'output', content: output }]);
+        resultEntries.push({ type: 'output', content: output });
       }
       
-      // Add error to terminal if present
       if (error) {
-        setTerminalOutput(prev => [...prev, { type: 'error', content: error }]);
+        resultEntries.push({ type: 'error', content: error });
       }
       
-      // Share result with other users via socket
-      if (socket) {
+      // Update local terminal by replacing the loading message with actual results
+      const finalHistory = [
+        ...updatedHistory.slice(0, -1), // Remove the loading message
+        ...resultEntries
+      ];
+      
+      setTerminalOutput(finalHistory);
+      
+      // Share command and results with other users via socket
+      if (socket && socket.connected) {
+        // Send the complete terminal entries
         socket.emit("executionResult", { 
           sessionId: activeSessionId, 
-          output: output,
-          error: error
+          terminalEntries: [commandEntry, ...resultEntries]
         });
       }
     } catch (error) {
       console.error("Code execution error:", error);
-      setTerminalOutput(prev => [...prev, 
-        { type: 'error', content: `Error executing code: ${error.message}` }
-      ]);
+      const errorEntry = { 
+        type: 'error', 
+        content: `Error executing code: ${error.message}` 
+      };
+      
+      // Update local terminal
+      const finalHistory = [
+        ...updatedHistory.slice(0, -1), // Remove the loading message
+        errorEntry
+      ];
+      
+      setTerminalOutput(finalHistory);
+      
+      // Share error with other users
+      if (socket && socket.connected) {
+        socket.emit("executionResult", {
+          sessionId: activeSessionId,
+          terminalEntries: [commandEntry, errorEntry]
+        });
+      }
     } finally {
       setIsExecuting(false);
     }
@@ -390,8 +538,8 @@ const CodeEditorDashboard = () => {
             setCurrentLanguage={setCurrentLanguage}
             executeCode={executeCode}    
             isExecuting={isExecuting}
-            socket={socket}               // Pass socket to EditorHeader
-            activeSessionId={activeSessionId} // Pass sessionId to EditorHeader
+            socket={socket}
+            activeSessionId={activeSessionId}
           />
           </div>
 
@@ -444,6 +592,8 @@ const CodeEditorDashboard = () => {
                   isVideoOn={isVideoOn}
                   toggleAudio={toggleAudio}
                   toggleVideo={toggleVideo}
+                  socket={socket}
+                  activeSessionId={activeSessionId}
                 />
               </div>
             )}
