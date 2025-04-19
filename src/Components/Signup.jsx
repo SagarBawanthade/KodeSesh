@@ -41,7 +41,6 @@ const SignUpPage = () => {
       // Store token if needed
       localStorage.setItem('token', response.data.token);
       
-      // Redirect to login or dashboard after a short delay
       setTimeout(() => {
         window.location.href = '/signin';
       }, 2000);
@@ -81,10 +80,10 @@ const SignUpPage = () => {
       {/* Card Container */}
       <div className="relative z-10 w-full min-h-[calc(100vh-56px)] flex items-center justify-center p-4">
         {/* Gradient Background Square */}
-        <div className="absolute w-[200px] sm:w-[600px] lg:w-[800px] xl:w-[1000px] h-[200px] sm:h-[600px] lg:h-[800px] xl:h-[1000px] bg-gradient-to-br from-teal-400 via-cyan-500 to-blue-500 opacity-30 blur-[50px] sm:blur-[100px] lg:blur-[150px]" />
+        <div className="absolute w-[200px] sm:w-[450px] lg:w-[550px] h-[200px] sm:h-[450px] lg:h-[550px] bg-gradient-to-br from-teal-400 via-cyan-500 to-blue-500 opacity-30 blur-[50px] sm:blur-[80px] lg:blur-[110px]" />
         
         {/* Card with gradient border */}
-        <div className="relative p-[2px] rounded-lg bg-gradient-to-br from-teal-500 via-cyan-500 to-sky-600 w-full max-w-[85vw] sm:max-w-[90vw] sm:w-96 md:w-[400px] lg:w-[450px] xl:w-[500px]">
+        <div className="relative p-[2px] rounded-lg bg-gradient-to-br from-teal-500 via-cyan-500 to-sky-600 w-full max-w-[90vw] sm:w-96 md:w-[420px]">
           <div className="bg-black rounded-lg p-4 sm:p-6 w-full shadow-xl">
             <h2 className="text-xl sm:text-2xl font-serif text-white text-center mb-4 sm:mb-6 tracking-tight">Create Account</h2>
             

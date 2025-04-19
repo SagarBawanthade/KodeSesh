@@ -6,7 +6,6 @@ import HowItWorks from './Components/HowItWorks';
 import TestimonialsCarousel from './Components/Test';
 import TeamSection from './Components/Team'; 
 import Footer from './Components/Footer';
-import DocumentationPage from './Components/Documentation';
 const Homepage = () => {
   return (
     <div>
@@ -22,4 +21,4 @@ const Homepage = () => {
   );
 };
 
-export default Homepage;
+export default Homepage; 
