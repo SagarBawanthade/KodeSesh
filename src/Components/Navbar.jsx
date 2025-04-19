@@ -24,14 +24,14 @@ const Navbar = () => {
   }, [dispatch, isAuthenticated, user]);
 
   const navItems = [
-    { label: "Docs", href: "./documentation" },
+    { label: "Docs", href: "/documentation" },
     { label: "blogs", href: "/blogs" },
     { label: "About", href: "/About" },
   ];
 
   const userMenuItems = [
     { label: "Account", href: "/account", icon: "user" },
-    { label: "Settings", href: "/settings", icon: "settings" },
+ 
     { label: "Logout", action: handleLogout, icon: "logout" },
   ];
 

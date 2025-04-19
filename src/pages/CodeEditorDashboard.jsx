@@ -6,6 +6,18 @@ import CodeEditor from '../components/CodeEditor';
 import CallPanel from '../components/CallPanel';
 import TerminalPanel from '../components/TerminalPanel';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+// Add these new imports
+import { Buffer as BufferPolyfill } from 'buffer';
+window.Buffer = BufferPolyfill;
+// Then import isomorphic-git
+import * as git from 'isomorphic-git';
+import http from 'isomorphic-git/http/web';
+import FS from '@isomorphic-git/lightning-fs';
+
+// Initialize file system (outside the component)
+const fs = new FS('kodeSeshFS');
+const dir = '/working-dir';
+const GIT_API_URL = 'https://api.github.com'; 
 
 const CodeEditorDashboard = () => {
   // State management
@@ -24,10 +36,145 @@ const CodeEditorDashboard = () => {
     { id: 1, name: "You", isHost: true, isMuted: false, isVideoOff: false },
   ]);
   const [socket, setSocket] = useState(null);
-  
+  const [gitStatus, setGitStatus] = useState([]);
+const [currentBranch, setCurrentBranch] = useState('main');
+const [commitMessage, setCommitMessage] = useState('');
+const [isShowingGitPanel, setIsShowingGitPanel] = useState(false);
+const [gitOperationInProgress, setGitOperationInProgress] = useState(false);
+
+// Add these to your CodeEditorDashboard component state
+const [gitAuthToken, setGitAuthToken] = useState(localStorage.getItem('githubToken') || '');
+const [gitRepoOwner, setGitRepoOwner] = useState(localStorage.getItem('gitRepoOwner') || '');
+const [gitRepoName, setGitRepoName] = useState(localStorage.getItem('gitRepoName') || '');
+const [isGitAuthenticated, setIsGitAuthenticated] = useState(!!localStorage.getItem('githubToken'));
+
+
+
   const navigate = useNavigate();
   const { sessionId } = useParams();
   const activeSessionId = sessionId || "demo-session";
+
+
+  // GitHub authentication function
+// GitHub authentication function
+// GitHub authentication function
+const authenticateGitHub = async () => {
+  const token = prompt('Enter your GitHub Personal Access Token (needs repo scope):');
+  const owner = prompt('Enter the repository owner (username):');
+  const repo = prompt('Enter the repository name:');
+  
+  if (token && owner && repo) {
+    // Verify the token works before saving
+    try {
+      const testResponse = await fetch(`https://api.github.com/user`, {
+        headers: {
+          'Authorization': `token ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+      
+      if (!testResponse.ok) {
+        throw new Error(`Token validation failed: ${testResponse.status} ${testResponse.statusText}`);
+      }
+      
+      // Verify repo access
+      const repoResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+        headers: {
+          'Authorization': `token ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+      
+      if (!repoResponse.ok) {
+        if (repoResponse.status === 404) {
+          throw new Error(`Repository ${owner}/${repo} not found or you don't have access to it.`);
+        } else {
+          throw new Error(`Repository validation failed: ${repoResponse.status} ${repoResponse.statusText}`);
+        }
+      }
+      
+      // If we get here, both token and repo are valid
+      localStorage.setItem('githubToken', token);
+      localStorage.setItem('gitRepoOwner', owner);
+      localStorage.setItem('gitRepoName', repo);
+      
+      setGitAuthToken(token);
+      setGitRepoOwner(owner);
+      setGitRepoName(repo);
+      setIsGitAuthenticated(true);
+      
+      // Add success message to terminal
+      const successEntry = { 
+        type: 'output', 
+        content: `Successfully authenticated with GitHub for repository ${owner}/${repo}`
+      };
+      setTerminalOutput(prev => [...prev, successEntry]);
+      
+      return { success: true, output: `Authentication successful for ${owner}/${repo}` };
+      
+    } catch (error) {
+      // Add error message to terminal
+      const errorEntry = { 
+        type: 'error', 
+        content: `GitHub authentication error: ${error.message}`
+      };
+      setTerminalOutput(prev => [...prev, errorEntry]);
+      
+      return { success: false, error: error.message };
+    }
+  } else {
+    const errorEntry = { 
+      type: 'error', 
+      content: 'Authentication cancelled or incomplete information provided.'
+    };
+    setTerminalOutput(prev => [...prev, errorEntry]);
+    
+    return { 
+      success: false, 
+      error: 'Authentication cancelled or incomplete information provided.'
+    };
+  }
+};
+
+// Add a function to verify GitHub credentials
+const verifyGitCredentials = async (token, owner, repo) => {
+  try {
+    const response = await fetch(`${GIT_API_URL}/repos/${owner}/${repo}`, {
+      headers: {
+        'Authorization': `token ${token}`,
+        'Accept': 'application/vnd.github.v3+json'
+      }
+    });
+    
+    if (response.ok) {
+      const repoData = await response.json();
+      // Add success message to terminal
+      const successEntry = { 
+        type: 'output', 
+        content: `Successfully connected to GitHub repository: ${repoData.full_name}`
+      };
+      setTerminalOutput(prev => [...prev, successEntry]);
+    } else {
+      throw new Error(`Failed to access repository: ${response.statusText}`);
+    }
+  } catch (error) {
+    // Add error message to terminal
+    const errorEntry = { 
+      type: 'error', 
+      content: `GitHub authentication error: ${error.message}`
+    };
+    setTerminalOutput(prev => [...prev, errorEntry]);
+    
+    // Clear stored credentials
+    localStorage.removeItem('githubToken');
+    localStorage.removeItem('gitRepoOwner');
+    localStorage.removeItem('gitRepoName');
+    setIsGitAuthenticated(false);
+  }
+};
+
+
+
   
   // Set default code templates based on language
   const codeTemplates = {
@@ -73,6 +220,9 @@ const CodeEditorDashboard = () => {
 
       // Request current language state from server/host
       newSocket.emit("getLanguageState", activeSessionId);
+      
+      // Request current terminal history from the host
+      newSocket.emit("getTerminalHistory", activeSessionId);
     });
     
     // Listen for code updates
@@ -162,6 +312,38 @@ const CodeEditorDashboard = () => {
           sessionId: activeSessionId,
           participantId: participant.id
         });
+      }
+    });
+
+    // Listen for terminal updates from other participants
+    newSocket.on("terminalUpdate", (data) => {
+      console.log("Received terminal update:", data);
+      if (data.sessionId === activeSessionId) {
+        if (Array.isArray(data.entries)) {
+          // Handle multiple entries (like when syncing full history)
+          setTerminalOutput(prev => [...prev, ...data.entries]);
+        } else if (data.entry) {
+          // Handle single entry update
+          setTerminalOutput(prev => [...prev, data.entry]);
+        }
+        
+        // Ensure terminal is open if we're getting real-time updates
+        if (!isTerminalOpen && data.entry?.type !== 'clear') {
+          setIsTerminalOpen(true);
+        }
+        
+        // Handle special commands
+        if (data.entry?.type === 'clear') {
+          setTerminalOutput([]);
+        }
+      }
+    });
+    
+    // Listen for terminal history sync (when joining a session)
+    newSocket.on("terminalHistory", (data) => {
+      console.log("Received terminal history:", data);
+      if (data.sessionId === activeSessionId && Array.isArray(data.history)) {
+        setTerminalOutput(data.history);
       }
     });
     
@@ -267,14 +449,11 @@ const CodeEditorDashboard = () => {
         name: "components",
         type: "folder",
         children: [
-          { name: "Header.jsx", type: "file" },
-          { name: "Sidebar.jsx", type: "file" },
-          { name: "Footer.jsx", type: "file" }
+         
         ]
       },
       { name: `main.${currentLanguage === 'javascript' ? 'js' : 'py'}`, type: "file" },
-      { name: "App.jsx", type: "file" },
-      { name: "styles.css", type: "file" }
+    
     ]
   };
 
@@ -331,6 +510,141 @@ const CodeEditorDashboard = () => {
     }
   };
   
+  // Terminal specific handlers
+  const handleTerminalCommand = (command) => {
+    // Handle terminal commands locally
+    if (command.trim().toLowerCase() === 'clear') {
+      // Clear the terminal
+      setTerminalOutput([]);
+      
+      // Notify other participants
+      if (socket && socket.connected) {
+        socket.emit("terminalUpdate", {
+          sessionId: activeSessionId,
+          entry: { type: 'clear', content: 'clear' }
+        });
+      }
+    } else {
+      // Add command to terminal history
+      const commandEntry = { type: 'input', content: command };
+      setTerminalOutput(prev => [...prev, commandEntry]);
+      
+      // Broadcast command to other participants
+      if (socket && socket.connected) {
+        socket.emit("terminalUpdate", {
+          sessionId: activeSessionId,
+          entry: commandEntry
+        });
+      }
+
+      if (command.startsWith('git ')) {
+        const gitCommand = command.substring(4).trim();
+        const [operation, ...args] = gitCommand.split(' ');
+        
+        switch (operation) {
+          case 'auth':
+            // Handle GitHub authentication
+            authenticateGitHub();
+            break;
+          case 'status':
+            performGitOperation('status');
+            break;
+          case 'branch':
+            if (args.length >= 1) {
+              const newBranch = args[0];
+              const startPoint = args.length >= 2 ? args[1] : currentBranch;
+              performGitOperation('branch', { name: newBranch, startPoint });
+            } else {
+              const errorEntry = { 
+                type: 'error', 
+                content: `'git branch' requires a branch name` 
+              };
+              setTerminalOutput(prev => [...prev, errorEntry]);
+            }
+            break;
+          case 'add':
+            performGitOperation('add', { args: args.join(' ') || '.' });
+            break;
+          case 'commit':
+            // Handle commit with -m flag
+            if (args[0] === '-m' && args.length > 1) {
+              const message = args.slice(1).join(' ');
+              setCommitMessage(message);
+              performGitOperation('commit', { message });
+            } else {
+              const msg = prompt('Enter commit message:', commitMessage || 'Update from KodeSesh');
+              if (msg !== null) {
+                setCommitMessage(msg);
+                performGitOperation('commit', { message: msg });
+              }
+            }
+            break;
+          case 'push':
+            performGitOperation('push', { branch: args[0] || currentBranch });
+            break;
+          case 'pull':
+            performGitOperation('pull', { branch: args[0] || currentBranch });
+            break;
+          case 'merge':
+            performGitOperation('merge', { branch: args[0] || 'develop' });
+            break;
+          case 'init':
+            performGitOperation('init');
+            break;
+          default:
+            // Unknown git operation
+            const outputEntry = { 
+              type: 'error', 
+              content: `Unsupported git operation: ${operation}` 
+            };
+            setTerminalOutput(prev => [...prev, outputEntry]);
+            
+            // Broadcast output to other participants
+            if (socket && socket.connected) {
+              socket.emit("terminalUpdate", {
+                sessionId: activeSessionId,
+                entry: outputEntry
+              });
+            }
+        }
+        return; // Exit function early since we handled the git command
+      }
+      // Process command (add your command processing logic here)
+      if (command.startsWith('run')) {
+        executeCode();
+      } else {
+        // Basic command processor for demo purposes
+        const outputEntry = { 
+          type: 'output', 
+          content: `Command '${command}' executed. Add your command processing logic here.` 
+        };
+        
+        setTerminalOutput(prev => [...prev, outputEntry]);
+        
+        // Broadcast output to other participants
+        if (socket && socket.connected) {
+          socket.emit("terminalUpdate", {
+            sessionId: activeSessionId,
+            entry: outputEntry
+          });
+        }
+      }
+    }
+  };
+  
+  // Handle clear terminal action
+  const clearTerminal = () => {
+    setTerminalOutput([]);
+    
+    // Notify other participants
+    if (socket && socket.connected) {
+      socket.emit("terminalUpdate", {
+        sessionId: activeSessionId,
+        entry: { type: 'clear', content: 'clear' }
+      });
+    }
+  };
+  
   // External API code execution
   const executeCode = async () => {
     if (isExecuting) return;
@@ -350,6 +664,14 @@ const CodeEditorDashboard = () => {
     // Update local terminal with command and loading message
     const updatedHistory = [...terminalOutput, commandEntry, loadingEntry];
     setTerminalOutput(updatedHistory);
+    
+    // Broadcast command and loading message to other participants
+    if (socket && socket.connected) {
+      socket.emit("terminalUpdate", {
+        sessionId: activeSessionId,
+        entries: [commandEntry, loadingEntry]
+      });
+    }
     
     // Ensure terminal is open
     if (!isTerminalOpen) {
@@ -402,10 +724,9 @@ const CodeEditorDashboard = () => {
       
       // Share command and results with other users via socket
       if (socket && socket.connected) {
-        // Send the complete terminal entries
         socket.emit("executionResult", { 
           sessionId: activeSessionId, 
-          terminalEntries: [commandEntry, ...resultEntries]
+          terminalEntries: resultEntries
         });
       }
     } catch (error) {
@@ -427,7 +748,7 @@ const CodeEditorDashboard = () => {
       if (socket && socket.connected) {
         socket.emit("executionResult", {
           sessionId: activeSessionId,
-          terminalEntries: [commandEntry, errorEntry]
+          terminalEntries: [errorEntry]
         });
       }
     } finally {
@@ -484,7 +805,820 @@ const CodeEditorDashboard = () => {
       };
     }
   };
+
+
+
+  // Initialize the repository
+const initRepo = async () => {
+  try {
+    // Create directory if it doesn't exist
+    try {
+      await fs.promises.mkdir(dir);
+    } catch (e) {
+      // Directory might already exist, that's fine
+    }
+    
+    // Initialize git repo if not already initialized
+    try {
+      await git.init({ fs, dir });
+    } catch (e) {
+      // Repo might already be initialized
+    }
+    
+    // Create initial file if it doesn't exist
+    const fileName = `main.${currentLanguage === 'javascript' ? 'js' : 'py'}`;
+    try {
+      await fs.promises.writeFile(`${dir}/${fileName}`, code);
+    } catch (e) {
+      console.log('File already exists or could not be created');
+    }
+    
+    return { success: true, output: 'Git repository initialized successfully' };
+  } catch (error) {
+    console.error('Git init error:', error);
+    return { success: false, error: `Failed to initialize repository: ${error.message}` };
+  }
+};
+
+// Configure Git remote (called by auth)
+// Configure Git remote (helper function)
+const configureRemote = async (owner, repoName, token) => {
+  try {
+    // Create directory if it doesn't exist
+    try {
+      await fs.promises.mkdir(dir);
+    } catch (e) {
+      // Directory might already exist, that's fine
+    }
+    
+    // Initialize git repo if not already initialized
+    try {
+      await git.init({ fs, dir });
+    } catch (e) {
+      // Repo might already be initialized
+    }
+    
+    // Configure auth
+    await git.setConfig({
+      fs,
+      dir,
+      path: 'user.name',
+      value: localStorage.getItem('userName') || 'KodeSesh User'
+    });
+    
+    await git.setConfig({
+      fs,
+      dir,
+      path: 'user.email',
+      value: 'user@kodesesh.com'
+    });
+    
+    // Set up remote with auth
+    const url = `https://${token}@github.com/${owner}/${repoName}.git`;
+    
+    try {
+      await git.addRemote({
+        fs,
+        dir,
+        remote: 'origin',
+        url
+      });
+    } catch (e) {
+      // Remote might already exist, try to update it
+      await git.deleteRemote({ fs, dir, remote: 'origin' });
+      await git.addRemote({
+        fs,
+        dir,
+        remote: 'origin',
+        url
+      });
+    }
+    
+    return { success: true, output: `Remote 'origin' configured for ${owner}/${repoName}` };
+  } catch (error) {
+    console.error('Git remote config error:', error);
+    return { success: false, error: `Failed to configure remote: ${error.message}` };
+  }
+};
+
+/// Check Git status
+const checkGitStatus = async () => {
+  try {
+    // Create directory if it doesn't exist
+    try {
+      await fs.promises.mkdir(dir);
+    } catch (e) {
+      // Directory might already exist, that's fine
+    }
+    
+    // Initialize git repo if not already initialized
+    try {
+      await git.init({ fs, dir });
+    } catch (e) {
+      // Repo might already be initialized
+    }
+    
+    const fileName = `main.${currentLanguage === 'javascript' ? 'js' : 'py'}`;
+    
+    // Update file with current code
+    await fs.promises.writeFile(`${dir}/${fileName}`, code);
+    
+    let status = '';
+    try {
+      // Get status
+      status = await git.status({
+        fs,
+        dir,
+        filepath: fileName
+      });
+    } catch (e) {
+      console.log('Could not get status:', e);
+      status = '*modified'; // Assume modified if error
+    }
+    
+    console.log('Git status:', status);
+    
+    // Create status array for UI indicators
+    const fileStatus = [
+      { path: fileName, status: status === '*modified' ? 'modified' : status === '*added' ? 'added' : status }
+    ];
+    
+    // Set the status in state for UI
+    setGitStatus(fileStatus);
+    
+    let statusOutput = '';
+    
+    switch (status) {
+      case '*added':
+        statusOutput = `added: ${fileName}`;
+        break;
+      case '*modified':
+        statusOutput = `modified: ${fileName}`;
+        break;
+      case '*deleted':
+        statusOutput = `deleted: ${fileName}`;
+        break;
+      case '':
+        statusOutput = `no changes: ${fileName}`;
+        break;
+      default:
+        statusOutput = `${status}: ${fileName}`;
+    }
+    
+    return {
+      success: true,
+      output: `On branch ${currentBranch}\nChanges:\n${statusOutput}`,
+      status: fileStatus,
+      branch: currentBranch
+    };
+  } catch (error) {
+    console.error('Git status error:', error);
+    return { success: false, error: `Failed to get git status: ${error.message}` };
+  }
+};
+
+// Add files to staging
+// Add files to staging
+const addFiles = async (files = '.') => {
+  try {
+    // Create directory if it doesn't exist
+    try {
+      await fs.promises.mkdir(dir);
+    } catch (e) {
+      // Directory might already exist, that's fine
+    }
+    
+    // Initialize git repo if not already initialized
+    try {
+      await git.init({ fs, dir });
+    } catch (e) {
+      // Repo might already be initialized
+    }
+    
+    const fileName = `main.${currentLanguage === 'javascript' ? 'js' : 'py'}`;
+    
+    // Update file with current code
+    await fs.promises.writeFile(`${dir}/${fileName}`, code);
+    
+    // Add file to git index
+    await git.add({
+      fs,
+      dir,
+      filepath: fileName
+    });
+    
+    return { success: true, output: `Added ${fileName} to staging area` };
+  } catch (error) {
+    console.error('Git add error:', error);
+    return { success: false, error: `Failed to add files: ${error.message}` };
+  }
+};
+
+// Commit changes
+// Commit changes
+const commitChanges = async (message) => {
+  try {
+    // First add the changes
+    const addResult = await addFiles();
+    if (!addResult.success) {
+      throw new Error(addResult.error);
+    }
+    
+    // Author information
+    const author = {
+      name: localStorage.getItem('userName') || 'KodeSesh User',
+      email: 'user@kodesesh.com'
+    };
+    
+    // Commit changes
+    const commitResult = await git.commit({
+      fs,
+      dir,
+      message,
+      author
+    });
+    
+    // Check if commitResult and oid exist before using slice
+    const commitId = commitResult && commitResult.oid 
+      ? commitResult.oid.slice(0, 7) 
+      : 'latest';
+    
+    return {
+      success: true,
+      output: `[${currentBranch}] ${message}`
+    };
+  } catch (error) {
+    console.error('Git commit error:', error);
+    return { success: false, error: `Failed to commit changes: ${error.message}` };
+  }
+};
+
+// Pull changes from remote using GitHub API (no CORS issues)
+const pullChanges = async (branch = 'main') => {
+  try {
+    if (!isGitAuthenticated || !gitAuthToken) {
+      throw new Error('GitHub authentication required. Use "git auth" to authenticate.');
+    }
+    
+    if (!gitRepoOwner || !gitRepoName) {
+      throw new Error('Repository information is missing. Please select a repository first.');
+    }
+    
+    // Get the file content directly from GitHub API
+    const fileName = `main.${currentLanguage === 'javascript' ? 'js' : 'py'}`;
+    
+    // Add status messages to terminal
+    const statusEntry = { 
+      type: 'output', 
+      content: `Pulling latest changes from ${gitRepoOwner}/${gitRepoName}:${branch}...` 
+    };
+    setTerminalOutput(prev => [...prev, statusEntry]);
+    
+    // Fetch file content from GitHub API
+    const response = await fetch(
+      `https://api.github.com/repos/${gitRepoOwner}/${gitRepoName}/contents/${fileName}?ref=${branch}`,
+      {
+        headers: {
+          'Authorization': `token ${gitAuthToken}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      }
+    );
+    
+    if (response.status === 404) {
+      const noFileEntry = { 
+        type: 'output', 
+        content: `File '${fileName}' doesn't exist in the repository yet. Creating a new file.` 
+      };
+      setTerminalOutput(prev => [...prev, noFileEntry]);
+      
+      // Instead of throwing an error, we'll create the file when pushing later
+      return {
+        success: true,
+        output: `Ready to create new file '${fileName}' in repository.`
+      };
+    }
+    
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    // GitHub stores content as base64
+    const content = atob(data.content);
+    
+    // Update the code in editor
+    setCode(content);
+    
+    // Update the local file
+    try {
+      // Create the directory first, handling any errors
+      try {
+        await fs.promises.mkdir(dir);
+      } catch (dirErr) {
+        // Directory might already exist, which is fine
+        console.log('Directory might already exist:', dirErr);
+      }
+      
+      // Now write the file
+      await fs.promises.writeFile(`${dir}/${fileName}`, content);
+    } catch (fsError) {
+      console.error('Error writing file to local filesystem:', fsError);
+      // This is not critical as we already updated the editor code
+    }
+    
+    // Notify other users
+    if (socket && socket.connected) {
+      socket.emit("codeUpdate", { 
+        sessionId: activeSessionId, 
+        code: content 
+      });
+    }
+    
+    return {
+      success: true,
+      output: `Successfully pulled latest version of ${fileName} from ${gitRepoOwner}/${gitRepoName}:${branch}`
+    };
+  } catch (error) {
+    console.error('Git pull error:', error);
+    return { success: false, error: `Failed to pull changes: ${error.message}` };
+  }
+};
+
+// Push changes to remote
+const pushChanges = async (branch = 'main') => {
+  try {
+    if (!isGitAuthenticated || !gitAuthToken) {
+      throw new Error('GitHub authentication required. Use "git auth" to authenticate.');
+    }
+    
+    // First make sure changes are committed
+    await commitChanges('Push from KodeSesh');
+    
+    try {
+      // 1. Get the current content
+      const fileName = `main.${currentLanguage === 'javascript' ? 'js' : 'py'}`;
+      const fileContent = code;
+      
+      console.log(`Pushing to GitHub: ${gitRepoOwner}/${gitRepoName}, branch: ${branch}, file: ${fileName}`);
+      
+      // 2. First check if the file already exists on GitHub
+      let sha = null;
+      try {
+        const checkResponse = await fetch(`https://api.github.com/repos/${gitRepoOwner}/${gitRepoName}/contents/${fileName}?ref=${branch}`, {
+          headers: {
+            'Authorization': `token ${gitAuthToken}`,
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        });
+        
+        if (checkResponse.status === 401) {
+          // Token is invalid - clear auth and prompt for new credentials
+          localStorage.removeItem('githubToken');
+          setGitAuthToken('');
+          setIsGitAuthenticated(false);
+          throw new Error('GitHub authentication failed. Please re-authenticate with a valid token.');
+        }
+        
+        if (checkResponse.ok) {
+          const fileData = await checkResponse.json();
+          sha = fileData.sha;
+          console.log(`File exists, sha: ${sha}`);
+        }
+      } catch (e) {
+        if (e.message.includes('authentication failed')) {
+          throw e; // Re-throw auth errors
+        }
+        console.log('File does not exist yet or other error:', e);
+      }
+      
+      // 3. Create or update the file using GitHub API
+      const response = await fetch(`https://api.github.com/repos/${gitRepoOwner}/${gitRepoName}/contents/${fileName}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `token ${gitAuthToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: 'Update from KodeSesh',
+          content: btoa(unescape(encodeURIComponent(fileContent))), // Properly encode content to handle Unicode
+          branch: branch,
+          sha: sha // Include sha if updating an existing file
+        })
+      });
+      
+      if (response.status === 401) {
+        // Token is invalid
+        localStorage.removeItem('githubToken');
+        setGitAuthToken('');
+        setIsGitAuthenticated(false);
+        throw new Error('GitHub authentication failed. Please re-authenticate with a valid token.');
+      }
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || `HTTP error ${response.status}`;
+        } catch (e) {
+          errorMessage = `HTTP error ${response.status}: ${errorText}`;
+        }
+        throw new Error(`GitHub API error: ${errorMessage}`);
+      }
+      
+      const result = await response.json();
+      
+      return {
+        success: true,
+        output: `Successfully pushed to ${gitRepoOwner}/${gitRepoName}:${branch}`
+      };
+      
+    } catch (error) {
+      console.error('GitHub API error:', error);
+      return { success: false, error: `Failed to push changes: ${error.message}` };
+    }
+    
+  } catch (error) {
+    console.error('Git push error:', error);
+    return { success: false, error: `Failed to push changes: ${error.message}` };
+  }
+};
+
+
+const mergeChanges = async (branch = 'develop') => {
+  try {
+    if (!isGitAuthenticated || !gitAuthToken) {
+      // Authentication check
+      const authEntry = { 
+        type: 'output', 
+        content: 'GitHub authentication required. Initiating OAuth flow...' 
+      };
+      setTerminalOutput(prev => [...prev, authEntry]);
+      handleGitHubAuth();
+      return { success: false, error: 'Authentication required. Please complete the GitHub authentication.' };
+    }
+    
+    if (!gitRepoOwner || !gitRepoName) {
+      return { success: false, error: 'Repository information is missing. Please select a repository first.' };
+    }
+    
+    // First, check if both branches exist
+    const statusEntry = { 
+      type: 'output', 
+      content: `Checking branches '${currentBranch}' and '${branch}'...` 
+    };
+    setTerminalOutput(prev => [...prev, statusEntry]);
+    
+    // Check if the destination branch exists
+    const baseBranchResponse = await fetch(
+      `https://api.github.com/repos/${gitRepoOwner}/${gitRepoName}/branches/${currentBranch}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${gitAuthToken}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      }
+    );
+    
+    if (baseBranchResponse.status === 404) {
+      const branchErrorEntry = { 
+        type: 'error', 
+        content: `Branch '${currentBranch}' does not exist in the repository.` 
+      };
+      setTerminalOutput(prev => [...prev, branchErrorEntry]);
+      return { success: false, error: `Branch '${currentBranch}' does not exist.` };
+    }
+    
+    // Check if the source branch exists
+    const headBranchResponse = await fetch(
+      `https://api.github.com/repos/${gitRepoOwner}/${gitRepoName}/branches/${branch}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${gitAuthToken}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      }
+    );
+    
+    if (headBranchResponse.status === 404) {
+      const branchErrorEntry = { 
+        type: 'error', 
+        content: `Branch '${branch}' does not exist in the repository.` 
+      };
+      setTerminalOutput(prev => [...prev, branchErrorEntry]);
+      return { success: false, error: `Branch '${branch}' does not exist.` };
+    }
+    
+    // If both branches exist, proceed with merge
+    const mergeEntry = { 
+      type: 'output', 
+      content: `Attempting to merge '${branch}' into '${currentBranch}'...` 
+    };
+    setTerminalOutput(prev => [...prev, mergeEntry]);
+    
+    const response = await fetch(`https://api.github.com/repos/${gitRepoOwner}/${gitRepoName}/merges`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${gitAuthToken}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        base: currentBranch,
+        head: branch,
+        commit_message: `Merge ${branch} into ${currentBranch} via KodeSesh`
+      })
+    });
+    
+    if (response.status === 204) {
+      // 204 means already merged (nothing to merge)
+      const alreadyMergedEntry = { 
+        type: 'output', 
+        content: `Branch '${branch}' is already merged into '${currentBranch}'` 
+      };
+      setTerminalOutput(prev => [...prev, alreadyMergedEntry]);
+      
+      return {
+        success: true,
+        output: `Branch '${branch}' is already merged into '${currentBranch}'`
+      };
+    }
+    
+    if (response.status === 409) {
+      // Conflict
+      const conflictEntry = { 
+        type: 'error', 
+        content: `Merge conflict between '${branch}' and '${currentBranch}'` 
+      };
+      setTerminalOutput(prev => [...prev, conflictEntry]);
+      
+      return {
+        success: false,
+        error: `Merge conflict detected. Please resolve conflicts manually.`
+      };
+    }
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || `API error (${response.status})`);
+    }
+    
+    // Successfully merged
+    const mergeData = await response.json();
+    
+    // Now pull the changes to update local files
+    await pullChanges(currentBranch);
+    
+    const successEntry = { 
+      type: 'output', 
+      content: `Successfully merged '${branch}' into '${currentBranch}'` 
+    };
+    setTerminalOutput(prev => [...prev, successEntry]);
+    
+    return {
+      success: true,
+      output: `Successfully merged '${branch}' into '${currentBranch}'`
+    };
+  } catch (error) {
+    console.error('Git merge error:', error);
+    
+    const errorEntry = { 
+      type: 'error', 
+      content: `Failed to merge changes: ${error.message}` 
+    };
+    setTerminalOutput(prev => [...prev, errorEntry]);
+    
+    return { success: false, error: `Failed to merge changes: ${error.message}` };
+  }
+};
+
+
+// Add this function to create a branch if it doesn't exist
+const createBranch = async (branchName, fromBranch = 'main') => {
+  try {
+    if (!isGitAuthenticated || !gitAuthToken) {
+      return { success: false, error: 'GitHub authentication required.' };
+    }
+    
+    // First get the SHA of the commit to branch from
+    const shaResponse = await fetch(
+      `https://api.github.com/repos/${gitRepoOwner}/${gitRepoName}/git/refs/heads/${fromBranch}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${gitAuthToken}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      }
+    );
+    
+    if (!shaResponse.ok) {
+      if (shaResponse.status === 404) {
+        return { success: false, error: `Branch '${fromBranch}' does not exist.` };
+      }
+      throw new Error(`GitHub API error: ${shaResponse.status} ${shaResponse.statusText}`);
+    }
+    
+    const shaData = await shaResponse.json();
+    const sha = shaData.object.sha;
+    
+    // Create the new branch
+    const createResponse = await fetch(
+      `https://api.github.com/repos/${gitRepoOwner}/${gitRepoName}/git/refs`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${gitAuthToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ref: `refs/heads/${branchName}`,
+          sha: sha
+        })
+      }
+    );
+    
+    if (!createResponse.ok) {
+      const errorData = await createResponse.json();
+      throw new Error(errorData.message || `API error (${createResponse.status})`);
+    }
+    
+    const successEntry = { 
+      type: 'output', 
+      content: `Successfully created branch '${branchName}' from '${fromBranch}'` 
+    };
+    setTerminalOutput(prev => [...prev, successEntry]);
+    
+    return {
+      success: true,
+      output: `Successfully created branch '${branchName}' from '${fromBranch}'`
+    };
+  } catch (error) {
+    console.error('Git branch creation error:', error);
+    
+    const errorEntry = { 
+      type: 'error', 
+      content: `Failed to create branch: ${error.message}` 
+    };
+    setTerminalOutput(prev => [...prev, errorEntry]);
+    
+    return { success: false, error: `Failed to create branch: ${error.message}` };
+  }
+};
+// Function to perform Git operations via API
+const performGitOperation = async (operation, params = {}) => {
+  if (gitOperationInProgress) return;
   
+  setGitOperationInProgress(true);
+  
+  // Create a command entry for terminal history
+  const commandEntry = { 
+    type: 'input', 
+    content: `git ${operation} ${params.args || ''}` 
+  };
+  
+  // Add loading message entry
+  const loadingEntry = { 
+    type: 'output', 
+    content: `Executing git ${operation}...` 
+  };
+  
+  // Update local terminal with command and loading message
+  const updatedHistory = [...terminalOutput, commandEntry, loadingEntry];
+  setTerminalOutput(updatedHistory);
+  
+  // Ensure terminal is open
+  if (!isTerminalOpen) {
+    setIsTerminalOpen(true);
+  }
+  
+  try {
+    // Example using GitHub REST API (in real implementation you'd need auth tokens)
+    // In a production app, you might use a backend service or WebWorker with isomorphic-git
+    let result;
+    
+    switch (operation) {
+      case 'init':
+        result = await initRepo();
+        break;
+        case 'branch':
+          result = await createBranch(params.name, params.startPoint);
+          break;
+      case 'status':
+        result = await checkGitStatus();
+        break;
+      case 'add':
+        result = await addFiles(params.files || '.');
+        break;
+      case 'commit':
+        result = await commitChanges(params.message || commitMessage || 'Update from KodeSesh');
+        break;
+      case 'push':
+        result = await pushChanges(params.branch || currentBranch);
+        break;
+      case 'pull':
+        result = await pullChanges(params.branch || currentBranch);
+        break;
+      case 'merge':
+        result = await mergeChanges(params.branch || 'develop');
+        break;
+      default:
+        result = { success: false, message: `Unknown git operation: ${operation}` };
+    }
+    
+    // Create result entries
+    const resultEntries = [];
+    
+    if (result.output) {
+      resultEntries.push({ type: 'output', content: result.output });
+    }
+    
+    if (result.error) {
+      resultEntries.push({ type: 'error', content: result.error });
+    }
+    
+    // Update local terminal by replacing the loading message with actual results
+    const finalHistory = [
+      ...updatedHistory.slice(0, -1), // Remove the loading message
+      ...resultEntries
+    ];
+    
+    setTerminalOutput(finalHistory);
+    
+    // Share command and results with other users via socket
+    if (socket && socket.connected) {
+      socket.emit("terminalUpdate", { 
+        sessionId: activeSessionId, 
+        entries: resultEntries
+      });
+    }
+    
+    // Update Git status if the operation was successful
+    if (result.success && operation === 'status') {
+      setGitStatus(result.status || []);
+    }
+    
+    // Update current branch if branch info was returned
+    if (result.branch) {
+      setCurrentBranch(result.branch);
+    }
+    
+  } catch (error) {
+    console.error(`Git ${operation} error:`, error);
+    const errorEntry = { 
+      type: 'error', 
+      content: `Error executing git ${operation}: ${error.message}` 
+    };
+    
+    // Update local terminal
+    const finalHistory = [
+      ...updatedHistory.slice(0, -1), // Remove the loading message
+      errorEntry
+    ];
+    
+    setTerminalOutput(finalHistory);
+    
+    // Share error with other users
+    if (socket && socket.connected) {
+      socket.emit("terminalUpdate", {
+        sessionId: activeSessionId,
+        entries: [errorEntry]
+      });
+    }
+  } finally {
+    setGitOperationInProgress(false);
+  }
+};
+
+// Git operations object
+const gitOperations = {
+  status: () => performGitOperation('status'),
+  add: () => performGitOperation('add'),
+  commit: () => {
+    // Show commit message input dialog
+    const message = prompt('Enter commit message:', commitMessage || 'Update from KodeSesh');
+    if (message !== null) {
+      setCommitMessage(message);
+      performGitOperation('commit', { message });
+    }
+  },
+  push: () => performGitOperation('push'),
+  pull: () => performGitOperation('pull'),
+  merge: () => {
+    // Show branch input dialog
+    const branch = prompt('Enter branch to merge from:', 'develop');
+    if (branch !== null) {
+      performGitOperation('merge', { branch });
+    }
+  },
+  authenticate: () => authenticateGitHub(),
+  toggleGitPanel: () => setIsShowingGitPanel(!isShowingGitPanel),
+  isShowingGitPanel: isShowingGitPanel,
+  isAuthenticated: isGitAuthenticated
+};
+
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-[#0f172a] to-[#0c0f1d] text-gray-100 overflow-hidden font-sans">
       {/* Ambient background effect */}
@@ -507,8 +1641,7 @@ const CodeEditorDashboard = () => {
               </span>
               <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">KodeSesh</span>
             </Link>
-            <FileExplorer.Controls />
-          </div>
+            <FileExplorer.Controls toggleGitPanel={gitOperations.toggleGitPanel} />    </div>
           
           {/* File Tree */}
           <div className="overflow-y-auto h-full py-2 px-1">
@@ -517,6 +1650,8 @@ const CodeEditorDashboard = () => {
               selectedFile={selectedFile}
               onFileSelect={setSelectedFile}
               currentLanguage={currentLanguage}  
+              gitOperations={gitOperations}  // Add this new prop
+              currentBranch={currentBranch}
             />
           </div>
         </div>
@@ -564,6 +1699,7 @@ const CodeEditorDashboard = () => {
                     code={code} 
                     onChange={handleCodeChange} 
                     language={currentLanguage}
+                    gitStatus={gitStatus}  // Add this new prop
                   />
                 </div>
               </div>
@@ -578,6 +1714,10 @@ const CodeEditorDashboard = () => {
                     onHeightChange={setTerminalHeight}
                     terminalHistory={terminalOutput}
                     setTerminalHistory={setTerminalOutput}
+                    onClear={clearTerminal}
+                    onCommand={handleTerminalCommand}
+                    socket={socket}
+                    sessionId={activeSessionId}
                   />
                 </div>
               )}
