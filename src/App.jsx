@@ -8,6 +8,7 @@ import DocumentationPage from './Components/Documentation';
 import AuthCallBack from './Components/AuthCallBack';
 import BlogList from './Components/blogs';
 import AboutPage from './Components/About';
+import Account from './Components/Account';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Homepage />} />
           <Route path="/signin" element={<SignInPage />} />
+          <Route path="/account" element={<Account />} />
           <Route path="/signup" element={<SignUpPage />} />
           <Route path="/code-editor-dashboard" element={<CodeEditorDashboard/>} />
           <Route path="/documentation" element={<DocumentationPage/>} /> 

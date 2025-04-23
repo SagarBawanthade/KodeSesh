@@ -23,6 +23,7 @@ export const loginUser = createAsyncThunk(
       localStorage.setItem('user', JSON.stringify(response.data.user));
       
       return response.data;
+      
     } catch (error) {
       return rejectWithValue(
         error.response?.data?.message || 'Something went wrong'

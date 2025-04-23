@@ -1053,7 +1053,7 @@ const commitChanges = async (message) => {
   }
 };
 
-// Pull changes from remote using GitHub API (no CORS issues)
+// 1. Fix pullChanges function to properly decode base64 content from GitHub
 const pullChanges = async (branch = 'main') => {
   try {
     if (!isGitAuthenticated || !gitAuthToken) {
@@ -1104,8 +1104,12 @@ const pullChanges = async (branch = 'main') => {
     }
     
     const data = await response.json();
-    // GitHub stores content as base64
-    const content = atob(data.content);
+    
+    // Properly decode GitHub's base64 content
+    // GitHub's base64 may contain newlines that need to be removed first
+    const base64Content = data.content.replace(/\s/g, '');
+    // Then decode the base64 content properly for multi-line text
+    const content = decodeURIComponent(escape(atob(base64Content)));
     
     // Update the code in editor
     setCode(content);
@@ -1145,7 +1149,7 @@ const pullChanges = async (branch = 'main') => {
   }
 };
 
-// Push changes to remote
+// 2. Fix pushChanges function to use the custom commit message
 const pushChanges = async (branch = 'main') => {
   try {
     if (!isGitAuthenticated || !gitAuthToken) {
@@ -1153,7 +1157,9 @@ const pushChanges = async (branch = 'main') => {
     }
     
     // First make sure changes are committed
-    await commitChanges('Push from KodeSesh');
+    // Use the stored commit message instead of hardcoding it
+    const message = commitMessage || 'Update from KodeSesh';
+    await commitChanges(message);
     
     try {
       // 1. Get the current content
@@ -1193,6 +1199,7 @@ const pushChanges = async (branch = 'main') => {
       }
       
       // 3. Create or update the file using GitHub API
+      // Use the same commit message here that was used in commitChanges
       const response = await fetch(`https://api.github.com/repos/${gitRepoOwner}/${gitRepoName}/contents/${fileName}`, {
         method: 'PUT',
         headers: {
@@ -1201,7 +1208,7 @@ const pushChanges = async (branch = 'main') => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          message: 'Update from KodeSesh',
+          message: message, // Use the custom message here
           content: btoa(unescape(encodeURIComponent(fileContent))), // Properly encode content to handle Unicode
           branch: branch,
           sha: sha // Include sha if updating an existing file
@@ -1232,7 +1239,7 @@ const pushChanges = async (branch = 'main') => {
       
       return {
         success: true,
-        output: `Successfully pushed to ${gitRepoOwner}/${gitRepoName}:${branch}`
+        output: `Successfully pushed to ${gitRepoOwner}/${gitRepoName}:${branch} with message: "${message}"`
       };
       
     } catch (error) {
