@@ -1,23 +1,19 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { io } from "socket.io-client";
 import FileExplorer from '../components/FileExplorer';
 import EditorHeader from '../components/EditorHeader';
 import CodeEditor from '../components/CodeEditor';
 import CallPanel from '../components/CallPanel';
 import TerminalPanel from '../components/TerminalPanel';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-// Add these new imports
+import { Link, useParams } from 'react-router-dom';
 import { Buffer as BufferPolyfill } from 'buffer';
 window.Buffer = BufferPolyfill;
-// Then import isomorphic-git
 import * as git from 'isomorphic-git';
-import http from 'isomorphic-git/http/web';
 import FS from '@isomorphic-git/lightning-fs';
-
-// Initialize file system (outside the component)
 const fs = new FS('kodeSeshFS');
 const dir = '/working-dir';
 const GIT_API_URL = 'https://api.github.com'; 
+import { useSelector } from 'react-redux';
 
 const CodeEditorDashboard = () => {
   // State management
@@ -37,34 +33,63 @@ const CodeEditorDashboard = () => {
   ]);
   const [socket, setSocket] = useState(null);
   const [gitStatus, setGitStatus] = useState([]);
-const [currentBranch, setCurrentBranch] = useState('main');
-const [commitMessage, setCommitMessage] = useState('');
-const [isShowingGitPanel, setIsShowingGitPanel] = useState(false);
-const [gitOperationInProgress, setGitOperationInProgress] = useState(false);
-
-// Add these to your CodeEditorDashboard component state
-const [gitAuthToken, setGitAuthToken] = useState(localStorage.getItem('githubToken') || '');
-const [gitRepoOwner, setGitRepoOwner] = useState(localStorage.getItem('gitRepoOwner') || '');
-const [gitRepoName, setGitRepoName] = useState(localStorage.getItem('gitRepoName') || '');
-const [isGitAuthenticated, setIsGitAuthenticated] = useState(!!localStorage.getItem('githubToken'));
-
-
-
-  const navigate = useNavigate();
+  const [currentBranch, setCurrentBranch] = useState('main');
+  const [commitMessage, setCommitMessage] = useState('');
+  const [isShowingGitPanel, setIsShowingGitPanel] = useState(false);
+  const [gitOperationInProgress, setGitOperationInProgress] = useState(false);
+  const [gitAuthToken, setGitAuthToken] = useState(localStorage.getItem('githubToken') || '');
+  const [gitRepoOwner, setGitRepoOwner] = useState(localStorage.getItem('gitRepoOwner') || '');
+  const [gitRepoName, setGitRepoName] = useState(localStorage.getItem('gitRepoName') || '');
+  const [isGitAuthenticated, setIsGitAuthenticated] = useState(!!localStorage.getItem('githubToken'));
   const { sessionId } = useParams();
   const activeSessionId = sessionId || "demo-session";
-
+  const [activeTypist, setActiveTypist] = useState(null);
+  const [typingTimerId, setTypingTimerId] = useState(null);
+  const [lastEditPosition, setLastEditPosition] = useState({ lineNumber: 0, column: 0 });
+  const [userColors, setUserColors] = useState({});
+  const { user } = useSelector((state) => state.user);
+  const [typingParticipants, setTypingParticipants] = useState({});
+const [lastActivity, setLastActivity] = useState({});
+  
+  // Helper function to generate consistent colors for users
+const generateUserColor = (userId) => {
+  // If user already has a color assigned, return it
+  if (userColors[userId]) return userColors[userId];
+  
+  // List of bright, distinct colors good for indicators
+  const colorPalette = [
+    '#FF5733', // Coral red
+    '#33FF57', // Bright green
+    '#3357FF', // Bright blue
+    '#FF33A8', // Pink
+    '#33FFF5', // Cyan
+    '#F5FF33', // Yellow
+    '#FF8C33', // Orange
+    '#8C33FF', // Purple
+    '#33FFB8', // Mint
+    '#FF33FF'  // Magenta
+  ];
+  
+  // Assign a color based on how many users already have colors
+  const colorIndex = Object.keys(userColors).length % colorPalette.length;
+  const newColor = colorPalette[colorIndex];
+  
+  // Save the color assignment
+  setUserColors(prev => ({
+    ...prev,
+    [userId]: newColor
+  }));
+  
+  return newColor;
+};
 
   // GitHub authentication function
-// GitHub authentication function
-// GitHub authentication function
-const authenticateGitHub = async () => {
+  const authenticateGitHub = async () => {
   const token = prompt('Enter your GitHub Personal Access Token (needs repo scope):');
   const owner = prompt('Enter the repository owner (username):');
   const repo = prompt('Enter the repository name:');
   
   if (token && owner && repo) {
-    // Verify the token works before saving
     try {
       const testResponse = await fetch(`https://api.github.com/user`, {
         headers: {
@@ -76,8 +101,7 @@ const authenticateGitHub = async () => {
       if (!testResponse.ok) {
         throw new Error(`Token validation failed: ${testResponse.status} ${testResponse.statusText}`);
       }
-      
-      // Verify repo access
+
       const repoResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
         headers: {
           'Authorization': `token ${token}`,
@@ -92,8 +116,7 @@ const authenticateGitHub = async () => {
           throw new Error(`Repository validation failed: ${repoResponse.status} ${repoResponse.statusText}`);
         }
       }
-      
-      // If we get here, both token and repo are valid
+
       localStorage.setItem('githubToken', token);
       localStorage.setItem('gitRepoOwner', owner);
       localStorage.setItem('gitRepoName', repo);
@@ -188,7 +211,7 @@ const verifyGitCredentials = async (token, owner, repo) => {
   // Socket connection
   useEffect(() => {
     // Create socket connection
-    const newSocket = io("http://localhost:5000", {
+    const newSocket = io("https://kodesesh-server.onrender.com", {
       transports: ["websocket", "polling"],
       upgrade: true,
       forceNew: true,
@@ -206,7 +229,13 @@ const verifyGitCredentials = async (token, owner, repo) => {
       // Join as a participant
       const userId = localStorage.getItem("userId") || Date.now().toString();
       localStorage.setItem("userId", userId); // Ensure userId is saved
-      const userName = localStorage.getItem("userName") || "Anonymous";
+     // Use Redux user name if available
+const userName = user?.name || localStorage.getItem("userName") || "Anonymous";
+
+// Also save Redux name to localStorage for consistency
+if (user?.name) {
+  localStorage.setItem("userName", user.name);
+}
       
       newSocket.emit("userJoined", {
         userId,
@@ -224,12 +253,101 @@ const verifyGitCredentials = async (token, owner, repo) => {
       // Request current terminal history from the host
       newSocket.emit("getTerminalHistory", activeSessionId);
     });
-    
-    // Listen for code updates
-    newSocket.on("codeUpdate", (updatedCode) => {
-      console.log("Received code update:", updatedCode);
-      setCode(updatedCode);
+
+    newSocket.on("userTyping", (data) => {
+      if (data.sessionId === activeSessionId) {
+        if (data.isTyping) {
+          setActiveTypist({
+            userId: data.userId,
+            userName: data.userName,
+            position: data.position
+          });
+          
+          // Add to typing participants
+          setTypingParticipants(prev => ({
+            ...prev,
+            [data.userId]: true
+          }));
+          
+          // Track activity
+          trackActivity(data.userId);
+          
+        } else if (activeTypist && activeTypist.userId === data.userId) {
+          // Clear typing status
+          setActiveTypist(null);
+          
+          // Remove from typing participants
+          setTypingParticipants(prev => {
+            const updated = {...prev};
+            delete updated[data.userId];
+            return updated;
+          });
+        }
+      }
     });
+    
+    
+    
+  
+  newSocket.on("codeUpdate", (updatedData) => {
+    try {
+      // Only update if we're not currently typing
+      const userId = localStorage.getItem("userId");
+      
+      // Extract code and metadata
+      const updatedCode = typeof updatedData === 'object' && updatedData.code ? updatedData.code : updatedData;
+      const typist = updatedData?.typist;
+      const editPosition = updatedData?.editPosition;
+      
+      console.log("Received code update:", updatedCode);
+      
+      // Validate received data to prevent white screens
+      if (typeof updatedCode !== 'string' || !updatedCode) {
+        console.error("Received invalid code update:", updatedCode);
+        return; // Don't update with invalid data
+      }
+      
+      // Update active typist info if provided
+      if (typist && typist.userId !== userId) {
+        setActiveTypist({
+          userId: typist.userId,
+          userName: typist.userName || "Anonymous",
+          position: editPosition || { lineNumber: 1, column: 1 }
+        });
+        
+        // Auto-clear the typist after 1.5 seconds
+        const timerId = setTimeout(() => {
+          setActiveTypist(prev => 
+            prev && prev.userId === typist.userId ? null : prev
+          );
+        }, 1500);
+        
+        setTypingTimerId(timerId);
+      }
+      
+      // Update code if not typing or if update is from another user
+      if (!typingTimerId || (typist && typist.userId !== userId)) {
+        // Always save to localStorage before updating state
+        const fileName = `main.${currentLanguage === 'javascript' ? 'js' : 'py'}`;
+        localStorage.setItem(`code_${activeSessionId}_${fileName}`, updatedCode);
+        
+        // Then update state
+        setCode(updatedCode);
+      }
+    } catch (error) {
+      console.error("Error handling code update:", error);
+      // Recover from localStorage if possible
+      const fileName = `main.${currentLanguage === 'javascript' ? 'js' : 'py'}`;
+      const savedCode = localStorage.getItem(`code_${activeSessionId}_${fileName}`);
+      if (savedCode) {
+        setCode(savedCode);
+      }
+    }
+  });
+
+
+  
+  
     
     // Listen for language updates (enhanced)
     newSocket.on("languageUpdate", (data) => {
@@ -384,14 +502,21 @@ const verifyGitCredentials = async (token, owner, repo) => {
       );
     });
     
-    // Clean up on unmount
     return () => {
-      console.log("Disconnecting socket");
-      if (newSocket) {
-        newSocket.disconnect();
+      try {
+        if (typingTimerId) {
+          clearTimeout(typingTimerId);
+        }
+        
+        if (newSocket) {
+          newSocket.disconnect();
+        }
+      } catch (error) {
+        console.error("Error cleaning up socket connection:", error);
       }
     };
-  }, [activeSessionId]);
+  }, [activeSessionId, user]); ;
+  
 
   // List of supported languages
   const supportedLanguages = ["javascript", "python"];
@@ -424,21 +549,89 @@ const verifyGitCredentials = async (token, owner, repo) => {
     setSelectedFile(`main.${extensions[language]}`);
   };
 
-  // This effect runs when currentLanguage changes from any source
-  useEffect(() => {
-    if (socket && socket.connected) {
-      console.log("Language changed to:", currentLanguage);
-      
-      // Update file extension
-      updateFileExtension(currentLanguage);
-      
-      // Broadcast language change to other participants
-      socket.emit("languageUpdate", {
-        sessionId: activeSessionId,
-        language: currentLanguage
-      });
+
+
+  // Add this useEffect to your component
+useEffect(() => {
+  if (user?.name) {
+    localStorage.setItem("userName", user.name);
+  }
+}, [user]);
+
+
+useEffect(() => {
+  try {
+    // Get the filename based on current language
+    const fileName = `main.${currentLanguage === 'javascript' ? 'js' : 'py'}`;
+    
+    // Try to load code from localStorage with error handling
+    let savedCode = null;
+    try {
+      savedCode = localStorage.getItem(`code_${activeSessionId}_${fileName}`);
+    } catch (error) {
+      console.error("Error reading from localStorage:", error);
     }
-  }, [currentLanguage]);
+    
+    // If saved code exists, use it
+    if (savedCode) {
+      setCode(savedCode);
+      
+      // Notify other participants if socket is connected
+      if (socket && socket.connected) {
+        try {
+          socket.emit("codeUpdate", { 
+            sessionId: activeSessionId, 
+            code: savedCode 
+          });
+        } catch (error) {
+          console.error("Error emitting code update on initial load:", error);
+        }
+      }
+    } else {
+      // If no saved code, use the template
+      setCode(codeTemplates[currentLanguage]);
+    }
+  } catch (error) {
+    console.error("Error loading initial code:", error);
+    // Fallback to default code template
+    setCode(codeTemplates[currentLanguage] || "// Start writing your code here!");
+  }
+}, [activeSessionId, socket]);// Only run when sessionId changes
+
+  // This effect runs when currentLanguage changes from any source
+  // Update language change logic to persist code for each language
+useEffect(() => {
+  if (socket && socket.connected) {
+    console.log("Language changed to:", currentLanguage);
+    
+    // Update file extension
+    updateFileExtension(currentLanguage);
+    
+    // Check if we have saved code for this language
+    const fileName = `main.${currentLanguage === 'javascript' ? 'js' : 'py'}`;
+    const savedCode = localStorage.getItem(`code_${activeSessionId}_${fileName}`);
+    
+    // If saved code exists for this language, load it
+    if (savedCode) {
+      setCode(savedCode);
+    } else {
+      // If no saved code, use the template
+      setCode(codeTemplates[currentLanguage]);
+    }
+    
+    // Broadcast language change to other participants
+    socket.emit("languageUpdate", {
+      sessionId: activeSessionId,
+      language: currentLanguage
+    });
+    
+    // After language change, also broadcast updated code
+    socket.emit("codeUpdate", { 
+      sessionId: activeSessionId, 
+      code: savedCode || codeTemplates[currentLanguage]
+    });
+  }
+}, [currentLanguage]);
 
   // Simulated file structure
   const fileStructure = {
@@ -462,13 +655,127 @@ const verifyGitCredentials = async (token, owner, repo) => {
     setIsTerminalOpen(!isTerminalOpen);
   };
 
-  const handleCodeChange = (newCode) => {
-    setCode(newCode);
-    if (socket && socket.connected) {
-      console.log("Sending code update for session:", activeSessionId);
-      socket.emit("codeUpdate", { sessionId: activeSessionId, code: newCode });
+  // Function to clear saved code (can be used for "New Session" feature)
+const clearSavedCode = () => {
+  // Get all localStorage keys
+  const keys = Object.keys(localStorage);
+  
+  // Filter for code-related keys for this session
+  const codeKeys = keys.filter(key => 
+    key.startsWith(`code_${activeSessionId}`)
+  );
+  
+  // Remove all code keys for this session
+  codeKeys.forEach(key => localStorage.removeItem(key));
+  
+  // Reset to default template
+  setCode(codeTemplates[currentLanguage]);
+};
+
+
+// Helper function to clean up old sessions (optional)
+const cleanupOldSessions = () => {
+  const MAX_SESSIONS = 5; // Keep at most 5 recent sessions
+  
+  // Get all localStorage keys
+  const keys = Object.keys(localStorage);
+  
+  // Get all unique session IDs
+  const sessionIds = keys
+    .filter(key => key.startsWith('code_'))
+    .map(key => key.split('_')[1])
+    .filter((value, index, self) => self.indexOf(value) === index);
+  
+  // If we have more than MAX_SESSIONS, remove oldest ones
+  if (sessionIds.length > MAX_SESSIONS) {
+    // Sort sessions by timestamp if your sessions use timestamp-based IDs
+    // Or implement another way to determine which are oldest
+    const sessionsToRemove = sessionIds.slice(0, sessionIds.length - MAX_SESSIONS);
+    
+    sessionsToRemove.forEach(sessionId => {
+      keys.filter(key => key.includes(`_${sessionId}_`))
+        .forEach(key => localStorage.removeItem(key));
+    });
+  }
+};
+
+// Call on component mount
+useEffect(() => {
+  cleanupOldSessions();
+}, []);
+
+
+const handleCodeChange = (newCode, event) => {
+  // Get user info - prioritize Redux store user over localStorage
+  const userId = localStorage.getItem("userId");
+  
+  // Use the name from Redux user state if available
+  const userName = user?.name || localStorage.getItem("userName") || "Anonymous";
+  
+  // Save the code BEFORE changing the state to prevent race conditions
+  const fileName = `main.${currentLanguage === 'javascript' ? 'js' : 'py'}`;
+  localStorage.setItem(`code_${activeSessionId}_${fileName}`, newCode);
+  
+  // Update edit position if we have the event details
+  if (event && event.changes && event.changes.length > 0) {
+    const change = event.changes[0];
+    setLastEditPosition({
+      lineNumber: change.range.startLineNumber,
+      column: change.range.startColumn
+    });
+  }
+  
+  // Only then update the local state
+  setCode(newCode);
+  
+  // Clear any existing timer
+  if (typingTimerId) {
+    clearTimeout(typingTimerId);
+  }
+  
+  // Set this user as active typist with the correct name
+  if (socket && socket.connected) {
+    // First send typing indicator
+    socket.emit("userTyping", {
+      sessionId: activeSessionId,
+      userId,
+      userName,
+      isTyping: true,
+      position: lastEditPosition
+    });
+    
+    // Then broadcast code update with proper error handling
+    try {
+      socket.emit("codeUpdate", { 
+        sessionId: activeSessionId, 
+        code: newCode,
+        editPosition: lastEditPosition,
+        typist: { userId, userName }
+      });
+    } catch (error) {
+      console.error("Error emitting code update:", error);
+      // If emit fails, at least we've saved to localStorage
     }
-  };
+    
+    // Set timer to clear typing status after 1.5 seconds of inactivity
+    const timerId = setTimeout(() => {
+      try {
+        socket.emit("userTyping", {
+          sessionId: activeSessionId,
+          userId,
+          userName,
+          isTyping: false
+        });
+      } catch (error) {
+        console.error("Error clearing typing status:", error);
+      }
+    }, 1500);
+    
+    setTypingTimerId(timerId);
+  }
+};
+
+
 
   const toggleAudio = () => {
     const newAudioState = !isAudioOn;
@@ -806,6 +1113,31 @@ const verifyGitCredentials = async (token, owner, repo) => {
     }
   };
 
+// Add this outside of any useEffect, at the component level
+const isRecentlyActive = (userId) => {
+  const lastActiveTime = lastActivity[userId];
+  if (!lastActiveTime) return false;
+  
+  // Consider active if activity within last 30 seconds
+  return (Date.now() - lastActiveTime) < 30000;
+};
+
+// Function to track activity
+const trackActivity = (userId) => {
+  if (!userId) return;
+  
+  setLastActivity(prev => ({
+    ...prev,
+    [userId]: Date.now()
+  }));
+};
+
+
+const enhancedParticipants = activeParticipants.map(p => ({
+  ...p,
+  isTyping: typingParticipants[p.id] || false,
+  isActive: isRecentlyActive(p.id)
+}));
 
 
   // Initialize the repository
@@ -1626,6 +1958,25 @@ const gitOperations = {
   isAuthenticated: isGitAuthenticated
 };
 
+// 7. Add a window event handler to save code before unload
+useEffect(() => {
+  const handleBeforeUnload = () => {
+    // Save current code state before page close/refresh
+    try {
+      const fileName = `main.${currentLanguage === 'javascript' ? 'js' : 'py'}`;
+      localStorage.setItem(`code_${activeSessionId}_${fileName}`, code);
+    } catch (error) {
+      console.error("Error saving code before unload:", error);
+    }
+  };
+  
+  window.addEventListener('beforeunload', handleBeforeUnload);
+  
+  return () => {
+    window.removeEventListener('beforeunload', handleBeforeUnload);
+  };
+}, [code, currentLanguage, activeSessionId]);
+
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-[#0f172a] to-[#0c0f1d] text-gray-100 overflow-hidden font-sans">
       {/* Ambient background effect */}
@@ -1652,14 +2003,16 @@ const gitOperations = {
           
           {/* File Tree */}
           <div className="overflow-y-auto h-full py-2 px-1">
-            <FileExplorer 
-              fileStructure={fileStructure} 
-              selectedFile={selectedFile}
-              onFileSelect={setSelectedFile}
-              currentLanguage={currentLanguage}  
-              gitOperations={gitOperations}  // Add this new prop
-              currentBranch={currentBranch}
-            />
+          <FileExplorer 
+  fileStructure={fileStructure} 
+  selectedFile={selectedFile}
+  onFileSelect={setSelectedFile}
+  currentLanguage={currentLanguage}  
+  gitOperations={gitOperations}
+  currentBranch={currentBranch}
+  isHost={activeParticipants.find(p => p.id === localStorage.getItem("userId"))?.isHost || false}
+  participants={enhancedParticipants}
+/>
           </div>
         </div>
 
@@ -1702,13 +2055,34 @@ const gitOperations = {
                 
                 {/* Editor Content */}
                 <div className={`h-full ${isTerminalOpen ? 'border-b border-indigo-900/30' : ''}`}>
-                  <CodeEditor 
-                    code={code} 
-                    onChange={handleCodeChange} 
-                    language={currentLanguage}
-                    gitStatus={gitStatus}  // Add this new prop
-                  />
-                </div>
+  {(() => {
+    try {
+      return (
+        <CodeEditor 
+          code={code || "// Start writing your code here!"} // Add fallback
+          onChange={handleCodeChange} 
+          language={currentLanguage}
+          gitStatus={gitStatus}
+          activeTypist={activeTypist}
+        />
+      );
+    } catch (error) {
+      console.error("Error rendering CodeEditor:", error);
+      // Fallback UI
+      return (
+        <div className="h-full flex items-center justify-center flex-col text-red-400">
+          <div className="mb-4">Error loading editor. Attempting to recover...</div>
+          <button 
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            onClick={() => window.location.reload()}
+          >
+            Reload Page
+          </button>
+        </div>
+      );
+    }
+  })()}
+</div>
               </div>
 
               {/* Terminal Panel */}

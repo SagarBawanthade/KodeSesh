@@ -28,7 +28,7 @@ const SignUpPage = () => {
     try {
       setIsLoading(true);
       // Make API request to register endpoint
-      const response = await axios.post('http://localhost:5000/api/auth/register', {
+      const response = await axios.post('https://kodesesh-server.onrender.com/api/auth/register', {
         name: formData.username,
         email: formData.email,
         password: formData.password
