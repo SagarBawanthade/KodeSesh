@@ -1,4 +1,4 @@
-import { X, ChevronRight, TerminalIcon, Users, Code2, Play, Loader } from 'lucide-react';
+import { X, ChevronRight, TerminalIcon, Users, Code2, Play, Loader, LogOut } from 'lucide-react';
 
 const EditorHeader = ({ 
   isSidebarOpen, 
@@ -13,8 +13,10 @@ const EditorHeader = ({
   setCurrentLanguage,
   executeCode,
   isExecuting,
-  socket,             // Add socket prop
-  activeSessionId     // Add sessionId prop
+  socket,
+  activeSessionId,
+  onEndSession,
+  isHost = false  // Default to false if not provided
 }) => {
   // Languages we support
   const supportedLanguages = [
@@ -68,7 +70,7 @@ const EditorHeader = ({
             
             <select
               value={currentLanguage}
-              onChange={handleLanguageChange} // Use our modified handler
+              onChange={handleLanguageChange}
               className="absolute bg-slate-950 inset-0 opacity-0 cursor-pointer w-full"
             >
               {supportedLanguages.map(lang => (
@@ -79,6 +81,17 @@ const EditorHeader = ({
             </select>
           </div>
         </div>
+        
+        {/* End Session Button - Only visible for hosts */}
+        {isHost && (
+          <button
+            onClick={onEndSession}
+            className="ml-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-medium transition-colors flex items-center gap-1.5"
+          >
+            <LogOut size={14} />
+            <span>End Session</span>
+          </button>
+        )}
       </div>
       
       <div className="flex items-center gap-3">
