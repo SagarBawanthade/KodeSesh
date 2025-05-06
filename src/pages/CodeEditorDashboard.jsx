@@ -17,10 +17,8 @@ import { useSelector } from 'react-redux';
 import SessionEndDialog from '../Components/SessionEndDialog';
 import PRReviewPanel from '../Components/PRReviewPanel';
 import GitAuthDialog from '../Components/GitAuthDialog';
-import EndSessionButton from '../Components/EndSessionButton';
 import PRCommandHandler from '../handlers/PRCommandHandler.js';
 import GitHubService from '../service/GitHubService.js';
-import GitPanel from '../Components/GitPanel';
 
 const CodeEditorDashboard = () => {
   // State management
@@ -116,8 +114,7 @@ const fetchSessionData = async () => {
         participantId?.toString() === localStorageId?.toString()
       );
     });
-    
-    console.log("Current user in participants:", currentUserParticipant);
+   
     
     // Set host status based on role field
     const isHost = currentUserParticipant?.role === "host";
@@ -153,8 +150,7 @@ useEffect(() => {
 
 // End session function
 const handleEndSession = () => {
-  // Show confirmation dialog
-  if (window.confirm('Are you sure you want to end this session?')) {
+  // 
     // If host, notify all participants
    
     const isHost = activeParticipants.find(p => p.id === userId)?.isHost || false;
@@ -167,7 +163,7 @@ const handleEndSession = () => {
     
     // Show session end dialog
     setShowSessionEndDialog(true);
-  }
+ 
 };
 
 // Handle git auth command
@@ -2296,7 +2292,7 @@ useEffect(() => {
         >
           {/* App Logo and Controls */}
           <div className="flex items-center justify-between p-3 border-b border-indigo-900/30 bg-gradient-to-r from-indigo-900/40 to-blue-900/30">
-            <Link to="/" className="text-sm font-bold text-cyan-400 tracking-widest uppercase hover:text-cyan-300 transition-colors flex items-center space-x-2">
+            <Link className="text-sm font-bold text-cyan-400 tracking-widest uppercase hover:text-cyan-300 transition-colors flex items-center space-x-2">
               <span className="bg-gradient-to-r from-cyan-400 to-blue-500 p-1 rounded">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -2326,59 +2322,26 @@ useEffect(() => {
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Editor Header */}
-          <div className="bg-gradient-to-r from-[#0f172a]/90 to-[#1e293b]/90 backdrop-blur-md border-b border-cyan-900/30 shadow-lg z-20">
+          {/* Editor Header - Properly implemented */}
           <EditorHeader 
-  isSidebarOpen={isSidebarOpen}
-  setIsSidebarOpen={setIsSidebarOpen}
-  isTerminalOpen={isTerminalOpen}
-  toggleTerminal={toggleTerminal}
-  selectedFile={selectedFile}
-  isCallPanelOpen={isCallPanelOpen}
-  setIsCallPanelOpen={setIsCallPanelOpen}
-  participantsCount={activeParticipants.length}
-  currentLanguage={currentLanguage}
-  setCurrentLanguage={setCurrentLanguage}
-  executeCode={executeCode}    
-  isExecuting={isExecuting}
-  socket={socket}
-  activeSessionId={activeSessionId}
-  isHost={isUserHost}  // Pass isUserHost directly
-  onEndSession={handleEndSession}  // Pass the handler directly
-/>
-            
-      
+            isSidebarOpen={isSidebarOpen}
+            setIsSidebarOpen={setIsSidebarOpen}
+            isTerminalOpen={isTerminalOpen}
+            toggleTerminal={toggleTerminal}
+            selectedFile={selectedFile}
+            isCallPanelOpen={isCallPanelOpen}
+            setIsCallPanelOpen={setIsCallPanelOpen}
+            participantsCount={activeParticipants.length}
+            currentLanguage={currentLanguage}
+            setCurrentLanguage={setCurrentLanguage}
+            executeCode={executeCode}    
+            isExecuting={isExecuting}
+            socket={socket}
+            activeSessionId={activeSessionId}
+            isHost={isUserHost}
+            onEndSession={handleEndSession}
+          />
 
-
-    {/* Add new modal components */}
-    <SessionEndDialog 
-      isOpen={showSessionEndDialog}
-      onClose={() => setShowSessionEndDialog(false)}
-      sessionId={activeSessionId}
-      userName={user?.name || localStorage.getItem("userName") || "Anonymous"}
-      code={code}
-      language={currentLanguage}
-          
-
-
-      addToTerminal={(entry) => setTerminalOutput(prev => [...prev, entry])}
-    />
-
-<PRReviewPanel 
-      isVisible={showPRReviewPanel}
-      onClose={() => setShowPRReviewPanel(false)}
-      addToTerminal={(entry) => setTerminalOutput(prev => [...prev, entry])}
-    />
-    
-    <GitAuthDialog 
-      isOpen={showGitAuthDialog}
-      onClose={() => setShowGitAuthDialog(false)}
-      addToTerminal={(entry) => setTerminalOutput(prev => [...prev, entry])}
-    />
-
-
-
-          </div>
 
           {/* Main Content with Editor and Call Panel */}
           <div className="flex-1 flex overflow-hidden">
@@ -2481,8 +2444,40 @@ useEffect(() => {
             {currentLanguage === 'javascript' ? 'JavaScript' : 'Python'}
           </span>
         </div>
-      </div>
-    </div>
+      </div >
+      {/* Dialogs - Move these to the end, outside other containers */}
+    {showSessionEndDialog && (
+      <SessionEndDialog 
+        isOpen={showSessionEndDialog}
+        onClose={() => setShowSessionEndDialog(false)}
+        sessionId={activeSessionId}
+        userName={user?.name || localStorage.getItem("userName") || "Anonymous"}
+        code={code}
+        language={currentLanguage}
+        isGitAuthenticated={isGitAuthenticated}
+        setIsGitAuthenticated={setIsGitAuthenticated}
+        gitOperations={gitOperations}
+        githubUser={githubUser}
+        addToTerminal={(entry) => setTerminalOutput(prev => [...prev, entry])}
+      />
+    )}
+    
+    {showPRReviewPanel && (
+      <PRReviewPanel 
+        isVisible={showPRReviewPanel}
+        onClose={() => setShowPRReviewPanel(false)}
+        addToTerminal={(entry) => setTerminalOutput(prev => [...prev, entry])}
+      />
+    )}
+    
+    {showGitAuthDialog && (
+      <GitAuthDialog 
+        isOpen={showGitAuthDialog}
+        onClose={() => setShowGitAuthDialog(false)}
+        addToTerminal={(entry) => setTerminalOutput(prev => [...prev, entry])}
+      />
+    )}
+  </div>
   );
 };
 
