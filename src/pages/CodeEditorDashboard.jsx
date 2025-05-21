@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { io } from "socket.io-client";
-import FileExplorer from '../components/FileExplorer';
-import EditorHeader from '../components/EditorHeader';
-import CodeEditor from '../components/CodeEditor';
-import CallPanel from '../components/CallPanel';
-import TerminalPanel from '../components/TerminalPanel';
+import FileExplorer from '../Components/FileExplorer';
+import EditorHeader from '../Components/EditorHeader';
+import CodeEditor from '../Components/CodeEditor';
+import CallPanel from '../Components/CallPanel';
+import TerminalPanel from '../Components/TerminalPanel';
 import { Link, useParams } from 'react-router-dom';
 import { Buffer as BufferPolyfill } from 'buffer';
 window.Buffer = BufferPolyfill;
@@ -14,6 +14,11 @@ const fs = new FS('kodeSeshFS');
 const dir = '/working-dir';
 const GIT_API_URL = 'https://api.github.com'; 
 import { useSelector } from 'react-redux';
+import SessionEndDialog from '../Components/SessionEndDialog';
+import GitAuthDialog from '../Components/GitAuthDialog';
+import PRCommandHandler from '../handlers/PRCommandHandler.js';
+import GitHubService from '../service/GitHubService.js';
+import PRReviewPanel from '../Components/PRReviewPanel';
 
 const CodeEditorDashboard = () => {
   // State management
@@ -48,8 +53,127 @@ const CodeEditorDashboard = () => {
   const [lastEditPosition, setLastEditPosition] = useState({ lineNumber: 0, column: 0 });
   const [userColors, setUserColors] = useState({});
   const { user } = useSelector((state) => state.user);
+  const userId = user?._id || user?.id;
   const [typingParticipants, setTypingParticipants] = useState({});
-const [lastActivity, setLastActivity] = useState({});
+  const [lastActivity, setLastActivity] = useState({});
+  const [showSessionEndDialog, setShowSessionEndDialog] = useState(false);
+  const [showPRReviewPanel, setShowPRReviewPanel] = useState(false);
+  const [showGitAuthDialog, setShowGitAuthDialog] = useState(false);
+  const prCommandHandler = useRef(null);
+  const [isUserHost, setIsUserHost] = useState(false);
+  const [githubUser, setGithubUser] = useState(null);
+  
+
+useEffect(() => {
+  const checkGitHubAuth = async () => {
+    // Get current authentication status
+    const { isAuthenticated } = GitHubService.getUserInfo();
+    setIsGitAuthenticated(isAuthenticated);
+    
+    // If authenticated, fetch user info
+    if (isAuthenticated) {
+      const userInfo = await GitHubService.fetchUserInfo();
+      setGithubUser(userInfo);
+    }
+  };
+  
+  checkGitHubAuth();
+}, []);
+
+
+// Add this effect to fetch session data and check host status
+useEffect(() => {
+ // In your CodeEditorDashboard component, modify the fetchSessionData function:
+
+const fetchSessionData = async () => {
+  try {
+    // Get user information
+    const userId = user?._id || user?.id;
+    const localStorageId = localStorage.getItem("userId");
+    
+    console.log("Redux User ID:", userId);
+    console.log("LocalStorage User ID:", localStorageId);
+    
+    if (!activeSessionId) return;
+    
+    // Fetch session data from your API
+    const response = await fetch(`https://kodesesh-server.onrender.com/api/session/${activeSessionId}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch session data: ${response.status}`);
+    }
+    
+    const sessionData = await response.json();
+    console.log("Session Data:", sessionData);
+    
+    // Check both Redux and localStorage IDs against participants
+    const currentUserParticipant = sessionData.participants.find(p => {
+      const participantId = p.user_id?._id || p.user_id;
+      return (
+        participantId === userId || 
+        participantId === localStorageId ||
+        participantId?.toString() === userId?.toString() ||
+        participantId?.toString() === localStorageId?.toString()
+      );
+    });
+   
+    
+    // Set host status based on role field
+    const isHost = currentUserParticipant?.role === "host";
+    setIsUserHost(isHost);
+    
+    console.log("User host status:", isHost);
+  } catch (error) {
+    console.error("Error fetching session data:", error);
+  }
+};
+  
+  fetchSessionData();
+}, [activeSessionId, user]);
+
+
+// Initialize PR command handler
+useEffect(() => {
+  prCommandHandler.current = new PRCommandHandler(
+    // Add to terminal function
+    (entry) => setTerminalOutput(prev => [...prev, entry]),
+    // Show PR panel function
+    setShowPRReviewPanel,
+    // Get session data function
+    () => ({
+      sessionId: activeSessionId,
+      userName: user?.name || localStorage.getItem("userName") || "Anonymous",
+      code,
+      language: currentLanguage,
+      isHost: isUserHost
+    })
+  );
+}, [activeSessionId, code, currentLanguage, isUserHost, user]);
+
+
+// End session function
+const handleEndSession = () => {
+  // 
+    // If host, notify all participants
+   
+    const isHost = activeParticipants.find(p => p.id === userId)?.isHost || false;
+    
+    if (isHost && socket && socket.connected) {
+      socket.emit("sessionEnding", {
+        sessionId: activeSessionId
+      });
+    }
+    
+    // Show session end dialog
+    setShowSessionEndDialog(true);
+ 
+};
+
+// Handle git auth command
+const handleGitAuth = () => {
+  setShowGitAuthDialog(true);
+};
+
+
   
   // Helper function to generate consistent colors for users
 const generateUserColor = (userId) => {
@@ -83,81 +207,53 @@ const generateUserColor = (userId) => {
   return newColor;
 };
 
-  // GitHub authentication function
   const authenticateGitHub = async () => {
-  const token = prompt('Enter your GitHub Personal Access Token (needs repo scope):');
-  const owner = prompt('Enter the repository owner (username):');
-  const repo = prompt('Enter the repository name:');
-  
-  if (token && owner && repo) {
-    try {
-      const testResponse = await fetch(`https://api.github.com/user`, {
-        headers: {
-          'Authorization': `token ${token}`,
-          'Accept': 'application/vnd.github.v3+json'
-        }
-      });
+    const token = prompt('Enter your GitHub Personal Access Token (needs repo scope):');
+    const owner = prompt('Enter the repository owner (username):');
+    const repo = prompt('Enter the repository name:');
+    
+    if (token && owner && repo) {
+      const result = await GitHubService.authenticate(token, owner, repo);
       
-      if (!testResponse.ok) {
-        throw new Error(`Token validation failed: ${testResponse.status} ${testResponse.statusText}`);
+      if (result.success) {
+        // Update state
+        setIsGitAuthenticated(true);
+        setGithubUser(result.user);
+        setGitRepoOwner(owner);
+        setGitRepoName(repo);
+        
+        // Add success message to terminal
+        const successEntry = { 
+          type: 'output', 
+          content: result.output
+        };
+        setTerminalOutput(prev => [...prev, successEntry]);
+        
+        return { success: true, output: result.output };
+      } else {
+        // Add error message to terminal
+        const errorEntry = { 
+          type: 'error', 
+          content: `GitHub authentication error: ${result.error}`
+        };
+        setTerminalOutput(prev => [...prev, errorEntry]);
+        
+        return { success: false, error: result.error };
       }
-
-      const repoResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-        headers: {
-          'Authorization': `token ${token}`,
-          'Accept': 'application/vnd.github.v3+json'
-        }
-      });
-      
-      if (!repoResponse.ok) {
-        if (repoResponse.status === 404) {
-          throw new Error(`Repository ${owner}/${repo} not found or you don't have access to it.`);
-        } else {
-          throw new Error(`Repository validation failed: ${repoResponse.status} ${repoResponse.statusText}`);
-        }
-      }
-
-      localStorage.setItem('githubToken', token);
-      localStorage.setItem('gitRepoOwner', owner);
-      localStorage.setItem('gitRepoName', repo);
-      
-      setGitAuthToken(token);
-      setGitRepoOwner(owner);
-      setGitRepoName(repo);
-      setIsGitAuthenticated(true);
-      
-      // Add success message to terminal
-      const successEntry = { 
-        type: 'output', 
-        content: `Successfully authenticated with GitHub for repository ${owner}/${repo}`
-      };
-      setTerminalOutput(prev => [...prev, successEntry]);
-      
-      return { success: true, output: `Authentication successful for ${owner}/${repo}` };
-      
-    } catch (error) {
-      // Add error message to terminal
+    } else {
       const errorEntry = { 
         type: 'error', 
-        content: `GitHub authentication error: ${error.message}`
+        content: 'Authentication cancelled or incomplete information provided.'
       };
       setTerminalOutput(prev => [...prev, errorEntry]);
       
-      return { success: false, error: error.message };
+      return { 
+        success: false, 
+        error: 'Authentication cancelled or incomplete information provided.'
+      };
     }
-  } else {
-    const errorEntry = { 
-      type: 'error', 
-      content: 'Authentication cancelled or incomplete information provided.'
-    };
-    setTerminalOutput(prev => [...prev, errorEntry]);
-    
-    return { 
-      success: false, 
-      error: 'Authentication cancelled or incomplete information provided.'
-    };
-  }
-};
+  };
+  
 
 // Add a function to verify GitHub credentials
 const verifyGitCredentials = async (token, owner, repo) => {
@@ -218,6 +314,27 @@ const verifyGitCredentials = async (token, owner, repo) => {
     });
     
     setSocket(newSocket);
+
+    newSocket.on("requestPRSync", (data) => {
+  if (data.sessionId === activeSessionId) {
+    console.log("Received PR sync request from:", data.userId);
+    
+    // Share our PRs with the requester
+    if (window.PRService) {
+      const sessionPRs = window.PRService.getPRsBySession(activeSessionId);
+      
+      if (sessionPRs.length > 0) {
+        sessionPRs.forEach(pr => {
+          socket.emit("prSync", {
+            sessionId: activeSessionId,
+            eventType: 'pr-added',
+            prData: pr
+          });
+        });
+      }
+    }
+  }
+});
     
     // Set up event listeners once socket is created
     newSocket.on("connect", () => {
@@ -283,6 +400,20 @@ if (user?.name) {
             return updated;
           });
         }
+      }
+    });
+
+    newSocket.on("sessionEnding", (data) => {
+      if (data.sessionId === activeSessionId) {
+        // Show notification in terminal
+        const entry = {
+          type: 'output',
+          content: 'The session host is ending this session. You can create a pull request with your changes.'
+        };
+        setTerminalOutput(prev => [...prev, entry]);
+        
+        // Show session end dialog
+        setShowSessionEndDialog(true);
       }
     });
     
@@ -410,6 +541,11 @@ if (user?.name) {
         setActiveParticipants(participants);
       }
     });
+
+    
+
+
+
     
     // Listen for participant join
     newSocket.on("participantJoined", (participant) => {
@@ -501,6 +637,75 @@ if (user?.name) {
         prev.map(p => p.id.toString() === userId.toString() ? {...p, isScreenSharing: false} : p)
       );
     });
+    const improvePRSyncHandling = () => {
+  // Replace the existing prSync event handler implementation with this:
+  newSocket.on("prSync", (data) => {
+    if (data && data.sessionId === activeSessionId) {
+      console.log("Received PR sync event:", data.eventType, data.prData?.id);
+      
+      // Ensure we have the PRService globally
+      if (!window.PRService) {
+        console.warn("PRService not available globally, attempting to initialize");
+        try {
+          // Try to access PRService from imports
+          const prService = require('../service/PRService').default;
+          window.PRService = prService;
+        } catch (error) {
+          console.error("Could not import PRService for PR sync:", error);
+        }
+      }
+      
+      // If PRService is available, handle the sync event
+      if (window.PRService) {
+        try {
+          window.PRService.handlePRSync(data.sessionId, data.eventType, data.prData);
+          
+          // IMPORTANT: Add terminal notification for host
+          if (data.eventType === 'pr-added' && isUserHost) {
+            addToTerminal({
+              type: 'output',
+              content: `New pull request received: "${data.prData.title}" from ${data.prData.author}`
+            });
+            
+            // Visually indicate a new PR is available
+            // Auto-flash the PR button or badge (can be implemented with a state)
+            // Optionally: Auto-open the PR review panel
+            if (typeof setShowPRReviewPanel === 'function') {
+              // Flash the badge instead of auto-opening to be less intrusive
+              // setShowPRReviewPanel(true);
+              if (typeof setNewPRNotification === 'function') {
+                setNewPRNotification(true);
+                // Auto-clear after 10 seconds
+                setTimeout(() => setNewPRNotification(false), 10000);
+              }
+            }
+          }
+          
+          // Re-fetch PR list if review panel is open
+          if (showPRReviewPanel && typeof refreshPRList === 'function') {
+            refreshPRList();
+          }
+        } catch (syncError) {
+          console.error("Error handling PR sync:", syncError);
+        }
+      }
+      
+      // Force redraw of any PR notification badges
+      if (typeof forceUpdateNotifications === 'function') {
+        forceUpdateNotifications();
+      }
+    }
+  });
+  
+  // Immediately request PR sync when joining
+  // This should happen after socket connection is established
+  newSocket.emit("requestPRSync", {
+    sessionId: activeSessionId,
+    userId: localStorage.getItem("userId") || 'unknown'
+  });
+  
+  console.log("Sent initial PR sync request for session:", activeSessionId);
+};
     
     return () => {
       try {
@@ -515,7 +720,27 @@ if (user?.name) {
         console.error("Error cleaning up socket connection:", error);
       }
     };
-  }, [activeSessionId, user]); ;
+  }, [activeSessionId, user]); 
+  
+  const addToTerminal = (entry) => {
+  setTerminalOutput(prev => [...prev, entry]);
+  
+  // If socket is connected, broadcast terminal update to other participants
+  if (socket && socket.connected) {
+    socket.emit("terminalUpdate", {
+      sessionId: activeSessionId,
+      entry: entry
+    });
+  }
+}
+
+
+const forceUpdateNotifications = () => {
+  // This forces PRNotificationBadge components to update
+  // by changing a key or counter that's passed to them
+  setNotificationRefreshCounter(prev => prev + 1);
+};
+;
   
 
   // List of supported languages
@@ -649,6 +874,8 @@ useEffect(() => {
     
     ]
   };
+
+  
 
   // Event handlers
   const toggleTerminal = () => {
@@ -842,6 +1069,18 @@ const handleCodeChange = (newCode, event) => {
           sessionId: activeSessionId,
           entry: commandEntry
         });
+      }
+
+      if (command.startsWith('pr ')) {
+        const [_, prCommand, ...args] = command.trim().split(' ');
+        prCommandHandler.current.handleCommand(prCommand, args);
+        return;
+      }
+      
+      // Handle git auth command
+      if (command === 'git auth') {
+        handleGitAuth();
+        return;
       }
 
       if (command.startsWith('git ')) {
@@ -1932,30 +2171,209 @@ const performGitOperation = async (operation, params = {}) => {
 };
 
 // Git operations object
-const gitOperations = {
-  status: () => performGitOperation('status'),
-  add: () => performGitOperation('add'),
-  commit: () => {
-    // Show commit message input dialog
+ // Update Git operations with GitHub service
+ const gitOperations = {
+  status: async () => {
+    const fileName = `main.${currentLanguage === 'javascript' ? 'js' : 'py'}`;
+    
+    // First, make sure the file exists in the git repo
+    try {
+      // Create the dir if it doesn't exist
+      await fs.promises.mkdir(dir).catch(() => {/* ignore if exists */});
+      
+      // Write current code to file
+      await fs.promises.writeFile(`${dir}/${fileName}`, code);
+    } catch (error) {
+      console.error('Error writing file:', error);
+    }
+    
+    const result = await GitHubService.checkStatus(fileName);
+    
+    // Add terminal output
+    const entry = { 
+      type: result.success ? 'output' : 'error', 
+      content: result.success ? result.output : result.error
+    };
+    setTerminalOutput(prev => [...prev, entry]);
+    
+    // Update git status and branch if available
+    if (result.success) {
+      if (result.status) setGitStatus(result.status);
+      if (result.branch) setCurrentBranch(result.branch);
+    }
+    
+    return result;
+  },
+  
+  add: async () => {
+    const fileName = `main.${currentLanguage === 'javascript' ? 'js' : 'py'}`;
+    
+    // First, make sure the file exists in the git repo
+    try {
+      // Create the dir if it doesn't exist
+      await fs.promises.mkdir(dir).catch(() => {/* ignore if exists */});
+      
+      // Write current code to file
+      await fs.promises.writeFile(`${dir}/${fileName}`, code);
+    } catch (error) {
+      console.error('Error writing file:', error);
+    }
+    
+    const result = await GitHubService.addFiles(fileName);
+    
+    // Add terminal output
+    const entry = { 
+      type: result.success ? 'output' : 'error', 
+      content: result.success ? result.output : result.error
+    };
+    setTerminalOutput(prev => [...prev, entry]);
+    
+    return result;
+  },
+  
+  commit: async () => {
     const message = prompt('Enter commit message:', commitMessage || 'Update from KodeSesh');
     if (message !== null) {
       setCommitMessage(message);
-      performGitOperation('commit', { message });
+      
+      // First add all changes
+      await gitOperations.add();
+      
+      const result = await GitHubService.commit(message);
+      
+      // Add terminal output
+      const entry = { 
+        type: result.success ? 'output' : 'error', 
+        content: result.success ? result.output : result.error
+      };
+      setTerminalOutput(prev => [...prev, entry]);
+      
+      return result;
     }
+    return { success: false, error: 'Commit cancelled' };
   },
-  push: () => performGitOperation('push'),
-  pull: () => performGitOperation('pull'),
-  merge: () => {
-    // Show branch input dialog
-    const branch = prompt('Enter branch to merge from:', 'develop');
-    if (branch !== null) {
-      performGitOperation('merge', { branch });
+  
+  push: async () => {
+    const result = await GitHubService.push(currentBranch);
+    
+    // Add terminal output
+    const entry = { 
+      type: result.success ? 'output' : 'error', 
+      content: result.success ? result.output : result.error
+    };
+    setTerminalOutput(prev => [...prev, entry]);
+    
+    return result;
+  },
+  
+  pull: async () => {
+    const result = await GitHubService.pull(currentBranch);
+    
+    // Add terminal output
+    const entry = { 
+      type: result.success ? 'output' : 'error', 
+      content: result.success ? result.output : result.error
+    };
+    setTerminalOutput(prev => [...prev, entry]);
+    
+    // If successful, update the code editor
+    if (result.success) {
+      try {
+        const fileName = `main.${currentLanguage === 'javascript' ? 'js' : 'py'}`;
+        const fileContent = await fs.promises.readFile(`${dir}/${fileName}`, { encoding: 'utf8' });
+        
+        if (fileContent) {
+          setCode(fileContent);
+          
+          // Notify other users
+          if (socket && socket.connected) {
+            socket.emit("codeUpdate", { 
+              sessionId: activeSessionId, 
+              code: fileContent 
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error reading file after pull:', error);
+      }
     }
+    
+    return result;
   },
+  
+  merge: async () => {
+    const branchToMerge = prompt('Enter branch to merge from:', 'develop');
+    if (branchToMerge !== null) {
+      const result = await GitHubService.merge(branchToMerge, currentBranch);
+      
+      // Add terminal output
+      const entry = { 
+        type: result.success ? 'output' : 'error', 
+        content: result.success ? result.output : result.error
+      };
+      setTerminalOutput(prev => [...prev, entry]);
+      
+      return result;
+    }
+    return { success: false, error: 'Merge cancelled' };
+  },
+  
   authenticate: () => authenticateGitHub(),
+  
+  createPullRequest: async () => {
+    if (!isGitAuthenticated) {
+      const authResult = await authenticateGitHub();
+      if (!authResult.success) {
+        return authResult;
+      }
+    }
+    
+    const title = prompt('Enter pull request title:', `Changes from KodeSesh session ${activeSessionId}`);
+    if (!title) return { success: false, error: 'PR creation cancelled' };
+    
+    const body = prompt('Enter pull request description:', 'This pull request contains changes made during a KodeSesh collaborative coding session.');
+    if (body === null) return { success: false, error: 'PR creation cancelled' };
+    
+    const sourceBranch = prompt('Enter source branch:', currentBranch);
+    if (!sourceBranch) return { success: false, error: 'PR creation cancelled' };
+    
+    const targetBranch = prompt('Enter target branch:', 'main');
+    if (targetBranch === null) return { success: false, error: 'PR creation cancelled' };
+    
+    // First make sure all changes are committed and pushed
+    await gitOperations.add();
+    await gitOperations.commit(`PR: ${title}`);
+    await gitOperations.push();
+    
+    const result = await GitHubService.createPullRequest(title, body, sourceBranch, targetBranch);
+    
+    // Add terminal output
+    const entry = { 
+      type: result.success ? 'output' : 'error', 
+      content: result.success ? result.output : result.error
+    };
+    setTerminalOutput(prev => [...prev, entry]);
+    
+    return result;
+  },
+  
+  logOut: () => {
+    const result = GitHubService.logout();
+    setIsGitAuthenticated(false);
+    setGithubUser(null);
+    
+    // Add terminal output
+    const entry = { 
+      type: 'output', 
+      content: 'Logged out from GitHub'
+    };
+    setTerminalOutput(prev => [...prev, entry]);
+    
+    return result;
+  },
+  
   toggleGitPanel: () => setIsShowingGitPanel(!isShowingGitPanel),
-  isShowingGitPanel: isShowingGitPanel,
-  isAuthenticated: isGitAuthenticated
+  isShowingGitPanel: isShowingGitPanel
 };
 
 // 7. Add a window event handler to save code before unload
@@ -1991,7 +2409,7 @@ useEffect(() => {
         >
           {/* App Logo and Controls */}
           <div className="flex items-center justify-between p-3 border-b border-indigo-900/30 bg-gradient-to-r from-indigo-900/40 to-blue-900/30">
-            <Link to="/" className="text-sm font-bold text-cyan-400 tracking-widest uppercase hover:text-cyan-300 transition-colors flex items-center space-x-2">
+            <Link className="text-sm font-bold text-cyan-400 tracking-widest uppercase hover:text-cyan-300 transition-colors flex items-center space-x-2">
               <span className="bg-gradient-to-r from-cyan-400 to-blue-500 p-1 rounded">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -2010,16 +2428,29 @@ useEffect(() => {
   currentLanguage={currentLanguage}  
   gitOperations={gitOperations}
   currentBranch={currentBranch}
-  isHost={activeParticipants.find(p => p.id === localStorage.getItem("userId"))?.isHost || false}
+  isHost={isUserHost} 
   participants={enhancedParticipants}
+  isGitAuthenticated={isGitAuthenticated}
+  githubUser={githubUser} 
+  sessionId={activeSessionId}
+  onViewPR={(prId) => {
+    // Just view PR details in terminal
+    if (prCommandHandler.current) {
+      prCommandHandler.current.handleCommand('status', [prId]);
+    }
+  }}
+  onReviewPR={(prId) => {
+    // Open the PR review panel
+    setShowPRReviewPanel(true);
+  }}
+  
 />
           </div>
         </div>
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Editor Header */}
-          <div className="bg-gradient-to-r from-[#0f172a]/90 to-[#1e293b]/90 backdrop-blur-md border-b border-cyan-900/30 shadow-lg z-20">
+          {/* Editor Header - Properly implemented */}
           <EditorHeader 
             isSidebarOpen={isSidebarOpen}
             setIsSidebarOpen={setIsSidebarOpen}
@@ -2035,8 +2466,11 @@ useEffect(() => {
             isExecuting={isExecuting}
             socket={socket}
             activeSessionId={activeSessionId}
+            isHost={isUserHost}
+            onEndSession={handleEndSession}
+             onOpenPRReviewPanel={() => setShowPRReviewPanel(true)}
           />
-          </div>
+
 
           {/* Main Content with Editor and Call Panel */}
           <div className="flex-1 flex overflow-hidden">
@@ -2123,7 +2557,7 @@ useEffect(() => {
       </div>
       
       {/* Status Bar */}
-      <div className="h-6 bg-gradient-to-r from-cyan-600 to-blue-700 text-white text-xs flex items-center px-4 justify-between border-t border-cyan-500/50 shadow-[0_-5px_15px_rgba(6,182,212,0.2)] z-10">
+      {/* <div className="h-6 bg-gradient-to-r from-cyan-600 to-blue-700 text-white text-xs flex items-center px-4 justify-between border-t border-cyan-500/50 shadow-[0_-5px_15px_rgba(6,182,212,0.2)] z-10">
         <div className="flex space-x-4">
           <div className="flex items-center">
             <div className="h-2 w-2 rounded-full bg-green-400 mr-2 shadow-[0_0_5px_#4ade80]"></div>
@@ -2139,8 +2573,52 @@ useEffect(() => {
             {currentLanguage === 'javascript' ? 'JavaScript' : 'Python'}
           </span>
         </div>
-      </div>
-    </div>
+      </div > */}
+      {/* Dialogs - Move these to the end, outside other containers */}
+    {showSessionEndDialog && (
+      <SessionEndDialog 
+        isOpen={showSessionEndDialog}
+        onClose={() => setShowSessionEndDialog(false)}
+        sessionId={activeSessionId}
+        userName={user?.name || localStorage.getItem("userName") || "Anonymous"}
+        code={code}
+        language={currentLanguage}
+        isGitAuthenticated={isGitAuthenticated}
+        setIsGitAuthenticated={setIsGitAuthenticated}
+        gitOperations={gitOperations}
+        githubUser={githubUser}
+        addToTerminal={(entry) => setTerminalOutput(prev => [...prev, entry])}
+        prCommandHandler={prCommandHandler}
+      />
+    )}
+    
+    {showPRReviewPanel && (
+      <PRReviewPanel 
+        isVisible={showPRReviewPanel}
+        onClose={() => setShowPRReviewPanel(false)}
+        addToTerminal={(entry) => setTerminalOutput(prev => [...prev, entry])}
+      />
+    )}
+    
+    {showGitAuthDialog && (
+      <GitAuthDialog 
+        isOpen={showGitAuthDialog}
+        onClose={() => setShowGitAuthDialog(false)}
+        addToTerminal={(entry) => setTerminalOutput(prev => [...prev, entry])}
+      />
+    )}
+
+    {/* PR Review Panel */}
+{showPRReviewPanel && (
+  <PRReviewPanel 
+    isVisible={showPRReviewPanel}
+    onClose={() => setShowPRReviewPanel(false)}
+    addToTerminal={(entry) => setTerminalOutput(prev => [...prev, entry])}
+    sessionId={activeSessionId}
+    isHost={isUserHost}
+  />
+)}
+  </div>
   );
 };
 
