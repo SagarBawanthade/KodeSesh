@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Navbar from './Navbar'; // Import the Navbar component
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom';
 
 const SignUpPage = () => {
   const [formData, setFormData] = useState({
@@ -12,6 +13,7 @@ const SignUpPage = () => {
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -71,9 +73,7 @@ const SignUpPage = () => {
         localStorage.setItem('token', response.data.token);
       }
       
-      setTimeout(() => {
-        window.location.href = '/signin';
-      }, 2000);
+      navigate('/signin'); // Redirect to sign-in page
       
     } catch (error) {
       console.error('Registration error:', error); // Debug log
