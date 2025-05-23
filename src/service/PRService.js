@@ -251,93 +251,91 @@ handlePRSync(sessionId, eventType, prData) {
   }
   
   // Review a PR
-  async reviewPR(id, action, comments = '') {
-    const pr = this.getPRById(id);
-    
-    if (!pr) {
-      return { success: false, error: `PR with ID ${id} not found` };
-    }
-    
-    // Update PR based on review action
-    switch (action) {
-      case 'approve':
-        pr.status = 'approved';
-        break;
-      case 'reject':
-        pr.status = 'rejected';
-        break;
-      case 'request-changes':
-        pr.status = 'changes-requested';
-        break;
-      default:
-        return { success: false, error: `Unknown review action: ${action}` };
-    }
-    
-    // Set reviewed details
-    pr.reviewedAt = new Date().toISOString();
-    pr.reviewedBy = localStorage.getItem('userName') || 'Anonymous';
-    
-    if (comments) {
-      pr.comments = comments;
-    }
-    
-    // If approved, create an actual GitHub PR
-    let prUrl = null;
-    let prNumber = null;
-    
-    if (action === 'approve') {
-      try {
-        // Import GitHubService if available
-        // This is a dynamic import to avoid circular dependencies
-        const GitHubService = await this.getGitHubService();
-        
-        if (GitHubService && GitHubService.isAuthenticated) {
-          // First ensure all changes are committed and pushed
-          try {
-            await GitHubService.addFiles();
-            await GitHubService.commit(`PR: ${pr.title}`);
-            await GitHubService.push();
-            
-            // Create GitHub PR
-            const prResult = await GitHubService.createPullRequest(
-              pr.title,
-              pr.description || `Pull request from KodeSesh session: ${pr.sessionId}`,
-              pr.sourceBranch || '',
-              pr.targetBranch || 'main'
-            );
-            
-            if (prResult.success) {
-              prUrl = prResult.url;
-              prNumber = prResult.number;
-              
-              // Update PR with GitHub info
-              pr.prUrl = prUrl;
-              pr.prNumber = prNumber;
-            }
-          } catch (error) {
-            console.error('Error creating GitHub PR:', error);
-            // Continue anyway - we already have the local PR
-          }
-        }
-      } catch (error) {
-        console.error('Error loading GitHubService:', error);
-        // Continue anyway - we already have the local PR
-      }
-    }
-    
-    // Save changes
-    this.savePRs();
-    
-    // Notify subscribers
-    this.notifySubscribers(`pr-${action}ed`, pr);
-    
-    return { 
-      success: true, 
-      review: pr,
-      prUrl,
-      prNumber
-    };
+  // Review a PR
+async reviewPR(id, action, comments = '') {
+  const pr = this.getPRById(id);
+  
+  if (!pr) {
+    return { success: false, error: `PR with ID ${id} not found` };
   }
+  
+  // Update PR based on review action
+  switch (action) {
+    case 'approve':
+      pr.status = 'approved';
+      break;
+    case 'reject':
+      pr.status = 'rejected';
+      break;
+    case 'request-changes':
+      pr.status = 'changes-requested';
+      break;
+    default:
+      return { success: false, error: `Unknown review action: ${action}` };
+  }
+  
+  // Set reviewed details
+  pr.reviewedAt = new Date().toISOString();
+  pr.reviewedBy = localStorage.getItem('userName') || 'Anonymous';
+  
+  if (comments) {
+    pr.comments = comments;
+  }
+  
+  // If approved, create an actual GitHub PR
+  let prUrl = null;
+  let prNumber = null;
+  
+  if (action === 'approve') {
+    try {
+      const GitHubService = await this.getGitHubService();
+      
+      if (GitHubService && GitHubService.isAuthenticated) {
+        try {
+          await GitHubService.addFiles();
+          await GitHubService.commit(`PR: ${pr.title}`);
+          await GitHubService.push();
+          
+          const prResult = await GitHubService.createPullRequest(
+            pr.title,
+            pr.description || `Pull request from KodeSesh session: ${pr.sessionId}`,
+            pr.sourceBranch || '',
+            pr.targetBranch || 'main'
+          );
+          
+          if (prResult.success) {
+            prUrl = prResult.url;
+            prNumber = prResult.number;
+            
+            pr.prUrl = prUrl;
+            pr.prNumber = prNumber;
+          }
+        } catch (error) {
+          console.error('Error creating GitHub PR:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading GitHubService:', error);
+    }
+  }
+  
+  // Save changes
+  this.savePRs();
+  
+  // Notify local subscribers
+  this.notifySubscribers(`pr-${action}d`, pr);
+  
+  // IMPORTANT: Broadcast the review action to other users
+  this.broadcastPR(`pr-${action}d`, pr);
+  
+  return { 
+    success: true, 
+    review: pr,
+    prUrl,
+    prNumber,
+    action: action
+  };
+}
   
   // Get GitHubService (dynamic import to avoid circular dependencies)
   async getGitHubService() {

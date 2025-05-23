@@ -19,6 +19,8 @@ import GitAuthDialog from '../Components/GitAuthDialog';
 import PRCommandHandler from '../handlers/PRCommandHandler.js';
 import GitHubService from '../service/GitHubService.js';
 import PRReviewPanel from '../Components/PRReviewPanel';
+import { showNotification, requestNotificationPermission } from '../utils/notification.js';
+
 
 const CodeEditorDashboard = () => {
   // State management
@@ -63,6 +65,13 @@ const CodeEditorDashboard = () => {
   const [isUserHost, setIsUserHost] = useState(false);
   const [githubUser, setGithubUser] = useState(null);
   
+  
+  
+
+
+  useEffect(() => {
+  requestNotificationPermission();
+}, []);
 
 useEffect(() => {
   const checkGitHubAuth = async () => {
@@ -97,7 +106,7 @@ const fetchSessionData = async () => {
     if (!activeSessionId) return;
     
     // Fetch session data from your API
-    const response = await fetch(`https://kodesesh-server.onrender.com/api/session/${activeSessionId}`);
+    const response = await fetch(`http://localhost:5000/api/session/${activeSessionId}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch session data: ${response.status}`);
     }
@@ -307,7 +316,7 @@ const verifyGitCredentials = async (token, owner, repo) => {
   // Socket connection
   useEffect(() => {
     // Create socket connection
-    const newSocket = io("https://kodesesh-server.onrender.com", {
+    const newSocket = io("http://localhost:5000", {
       transports: ["websocket", "polling"],
       upgrade: true,
       forceNew: true,
@@ -315,30 +324,19 @@ const verifyGitCredentials = async (token, owner, repo) => {
     
     setSocket(newSocket);
 
-    newSocket.on("requestPRSync", (data) => {
-  if (data.sessionId === activeSessionId) {
-    console.log("Received PR sync request from:", data.userId);
-    
-    // Share our PRs with the requester
-    if (window.PRService) {
-      const sessionPRs = window.PRService.getPRsBySession(activeSessionId);
-      
-      if (sessionPRs.length > 0) {
-        sessionPRs.forEach(pr => {
-          socket.emit("prSync", {
-            sessionId: activeSessionId,
-            eventType: 'pr-added',
-            prData: pr
-          });
-        });
-      }
-    }
-  }
-});
-    
+    window.socket = newSocket;
+    window.socketConnection = newSocket; 
+
+
     // Set up event listeners once socket is created
     newSocket.on("connect", () => {
       console.log("Connected to server with ID:", newSocket.id);
+
+       setTimeout(() => {
+    if (window.PRService) {
+      window.PRService.requestPRSync(activeSessionId);
+    }
+  }, 1000);
       
       // Join the session
       newSocket.emit("joinSession", activeSessionId);
@@ -542,6 +540,47 @@ if (user?.name) {
       }
     });
 
+
+    // ADD THIS PROPERLY - Fix the prSync handler
+  newSocket.on("prSync", (data) => {
+    console.log("📥 Frontend received PR sync event:", data);
+    
+    if (data && data.sessionId === activeSessionId) {
+      console.log("PR sync event matches current session:", data.eventType, data.prData?.id);
+      
+      // Ensure PRService handles the sync
+      if (window.PRService) {
+        window.PRService.handlePRSync(data.sessionId, data.eventType, data.prData);
+        
+        // Special handling for hosts - show notifications
+        if (data.eventType === 'pr-added' && isUserHost) {
+          console.log("Host received new PR notification");
+          
+          // Add terminal notification
+          const entry = {
+            type: 'output',
+            content: `🔔 New pull request received: "${data.prData.title}" from ${data.prData.author}`
+          };
+          setTerminalOutput(prev => [...prev, entry]);
+          
+          // Force update notifications
+          forceUpdateNotifications();
+          
+          // Show browser notification
+          showNotification(`New PR: ${data.prData.title}`, 'info');
+        }
+      }
+    }
+  });
+
+
+  // Debug: Log all PR-related events
+  newSocket.onAny((eventName, ...args) => {
+    if (eventName.includes('pr') || eventName.includes('PR')) {
+      console.log(`🔍 Socket Event: ${eventName}`, args);
+    }
+  });
+
     
 
 
@@ -637,66 +676,84 @@ if (user?.name) {
         prev.map(p => p.id.toString() === userId.toString() ? {...p, isScreenSharing: false} : p)
       );
     });
-    const improvePRSyncHandling = () => {
-  // Replace the existing prSync event handler implementation with this:
-  newSocket.on("prSync", (data) => {
-    if (data && data.sessionId === activeSessionId) {
-      console.log("Received PR sync event:", data.eventType, data.prData?.id);
+ 
+// Enhanced prSync handler that works with NATS
+newSocket.on("prSync", (data) => {
+  console.log("📥 Frontend received PR sync event:", data);
+  
+  if (data && data.sessionId === activeSessionId) {
+    console.log("PR sync event matches current session:", data.eventType, data.prData?.id);
+    
+    // Ensure PRService handles the sync
+    if (window.PRService) {
+      window.PRService.handlePRSync(data.sessionId, data.eventType, data.prData);
       
-      // Ensure we have the PRService globally
-      if (!window.PRService) {
-        console.warn("PRService not available globally, attempting to initialize");
-        try {
-          // Try to access PRService from imports
-          const prService = require('../service/PRService').default;
-          window.PRService = prService;
-        } catch (error) {
-          console.error("Could not import PRService for PR sync:", error);
-        }
-      }
-      
-      // If PRService is available, handle the sync event
-      if (window.PRService) {
-        try {
-          window.PRService.handlePRSync(data.sessionId, data.eventType, data.prData);
-          
-          // IMPORTANT: Add terminal notification for host
-          if (data.eventType === 'pr-added' && isUserHost) {
-            addToTerminal({
-              type: 'output',
-              content: `New pull request received: "${data.prData.title}" from ${data.prData.author}`
-            });
-            
-            // Visually indicate a new PR is available
-            // Auto-flash the PR button or badge (can be implemented with a state)
-            // Optionally: Auto-open the PR review panel
-            if (typeof setShowPRReviewPanel === 'function') {
-              // Flash the badge instead of auto-opening to be less intrusive
-              // setShowPRReviewPanel(true);
-              if (typeof setNewPRNotification === 'function') {
-                setNewPRNotification(true);
-                // Auto-clear after 10 seconds
-                setTimeout(() => setNewPRNotification(false), 10000);
-              }
-            }
-          }
-          
-          // Re-fetch PR list if review panel is open
-          if (showPRReviewPanel && typeof refreshPRList === 'function') {
-            refreshPRList();
-          }
-        } catch (syncError) {
-          console.error("Error handling PR sync:", syncError);
-        }
-      }
-      
-      // Force redraw of any PR notification badges
-      if (typeof forceUpdateNotifications === 'function') {
+      // Handle different event types
+      if (data.eventType === 'pr-added' && isUserHost) {
+        // Host notification for new PR
+        const entry = {
+          type: 'output',
+          content: `🔔 New pull request received: "${data.prData.title}" from ${data.prData.author}`
+        };
+        setTerminalOutput(prev => [...prev, entry]);
+        
+        showNotification(`New PR: ${data.prData.title}`, 'info');
         forceUpdateNotifications();
       }
+      
+      // NEW: Handle review notifications for PR authors
+      const currentUserId = localStorage.getItem("userId");
+      const currentUserName = user?.name || localStorage.getItem("userName") || "Anonymous";
+      
+      // Check if this is a review action and the current user is the PR author
+      if (['pr-approved', 'pr-rejected', 'pr-changes-requested'].includes(data.eventType) && 
+          (data.prData.authorId === currentUserId || data.prData.author === currentUserName)) {
+        
+        let notificationMessage = '';
+        let notificationType = 'info';
+        
+        switch (data.eventType) {
+          case 'pr-approved':
+            notificationMessage = `✅ Your PR "${data.prData.title}" has been approved by ${data.prData.reviewedBy}!`;
+            notificationType = 'success';
+            break;
+          case 'pr-rejected':
+            notificationMessage = `❌ Your PR "${data.prData.title}" has been rejected by ${data.prData.reviewedBy}.`;
+            notificationType = 'error';
+            break;
+          case 'pr-changes-requested':
+            notificationMessage = `📝 Changes requested for your PR "${data.prData.title}" by ${data.prData.reviewedBy}.`;
+            notificationType = 'warning';
+            break;
+        }
+        
+        if (notificationMessage) {
+          // Add to terminal
+          const entry = {
+            type: notificationType === 'error' ? 'error' : 'output',
+            content: notificationMessage
+          };
+          setTerminalOutput(prev => [...prev, entry]);
+          
+          // Show browser notification
+          showNotification(notificationMessage, notificationType);
+          
+          // If there are review comments, show them too
+          if (data.prData.comments) {
+            const commentEntry = {
+              type: 'output',
+              content: `Review comments: ${data.prData.comments}`
+            };
+            setTerminalOutput(prev => [...prev, commentEntry]);
+          }
+          
+          // Force update notifications
+          forceUpdateNotifications();
+        }
+      }
     }
-  });
-  
+  }
+});
   // Immediately request PR sync when joining
   // This should happen after socket connection is established
   newSocket.emit("requestPRSync", {
@@ -705,7 +762,7 @@ if (user?.name) {
   });
   
   console.log("Sent initial PR sync request for session:", activeSessionId);
-};
+
     
     return () => {
       try {
@@ -714,8 +771,12 @@ if (user?.name) {
         }
         
         if (newSocket) {
-          newSocket.disconnect();
-        }
+      newSocket.disconnect();
+      if (window.socket === newSocket) {
+        window.socket = null;
+        window.socketConnection = null;
+      }
+    }
       } catch (error) {
         console.error("Error cleaning up socket connection:", error);
       }

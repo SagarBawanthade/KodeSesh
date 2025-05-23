@@ -42,7 +42,7 @@ const HeroSection = () => {
     setIsLoading(true);
   
     try {
-      const response = await fetch("https://kodesesh-server.onrender.com/api/session/create", {
+      const response = await fetch("http://localhost:5000/api/session/create", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -94,7 +94,7 @@ const HeroSection = () => {
     try {
       console.log("Attempting to join session:", trimmedSessionId);
       
-      const response = await fetch("https://kodesesh-server.onrender.com/api/session/join", {
+      const response = await fetch("http://localhost:5000/api/session/join", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

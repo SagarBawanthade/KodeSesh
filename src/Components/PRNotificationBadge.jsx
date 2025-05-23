@@ -6,11 +6,37 @@ const PRNotificationBadge = ({
   sessionId,
   onClick = () => {},
   color = 'cyan',
-  isHost = false
+  isHost = false,
+  refreshCounter = 0 
 }) => {
   const [pendingCount, setPendingCount] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   
+   // Add refreshCounter to dependencies to force updates
+  useEffect(() => {
+    updatePendingCount();
+    
+    const intervalId = setInterval(updatePendingCount, 10000);
+    
+    const unsubscribe = prManager.subscribe((event, data) => {
+      if (['pr-added', 'pr-sync', 'pr-approved', 'pr-rejected', 'pr-changes-requested'].includes(event)) {
+        updatePendingCount();
+        
+        // Animate on new PRs
+        if (event === 'pr-added') {
+          setIsAnimating(true);
+          setTimeout(() => setIsAnimating(false), 1000);
+        }
+      }
+    });
+    
+    return () => {
+      clearInterval(intervalId);
+      unsubscribe();
+    };
+  }, [sessionId, refreshCounter]);
+
+
   // Load pending PR count on mount and periodically
   useEffect(() => {
     // Initial load

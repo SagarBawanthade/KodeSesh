@@ -56,7 +56,7 @@ const SignUpPage = () => {
       console.log('Sending payload:', payload); // Debug log
 
       // Make API request to register endpoint
-      const response = await axios.post('https://kodesesh-server.onrender.com/api/auth/register', payload, {
+      const response = await axios.post('http://localhost:5000/api/auth/register', payload, {
         headers: {
           'Content-Type': 'application/json'
         }

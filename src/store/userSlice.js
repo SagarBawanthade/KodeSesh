@@ -13,7 +13,7 @@ export const loginUser = createAsyncThunk(
   'user/login',
   async ({ email, password }, { rejectWithValue }) => {
     try {
-      const response = await axios.post('https://kodesesh-server.onrender.com/api/auth/login', {
+      const response = await axios.post('http://localhost:5000/api/auth/login', {
         email,
         password
       });
@@ -37,7 +37,7 @@ export const registerUser = createAsyncThunk(
   'user/register',
   async ({ name, email, password }, { rejectWithValue }) => {
     try {
-      const response = await axios.post('https://kodesesh-server.onrender.com/api/auth/register', {
+      const response = await axios.post('http://localhost:5000/api/auth/register', {
         name,
         email,
         password
@@ -67,7 +67,7 @@ export const getUserProfile = createAsyncThunk(
         return rejectWithValue('No token found');
       }
       
-      const response = await axios.get('https://kodesesh-server.onrender.com/api/getuser', {
+      const response = await axios.get('http://localhost:5000/api/getuser', {
         headers: {
           Authorization: `Bearer ${token}`
         }

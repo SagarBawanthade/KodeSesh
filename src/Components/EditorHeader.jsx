@@ -22,6 +22,7 @@ const EditorHeader = ({
   onOpenPRReviewPanel = () => {},
 }) => {
   // Add state for modal dialog
+  const [notificationRefreshCounter, setNotificationRefreshCounter] = useState(0);
   const [isEndSessionModalOpen, setIsEndSessionModalOpen] = useState(false);
   
   // Languages we support
@@ -64,6 +65,12 @@ const EditorHeader = ({
     }
   };
   
+  const forceUpdateNotifications = () => {
+  // This forces PRNotificationBadge components to update
+  // by changing a key or counter that's passed to them
+  setNotificationRefreshCounter(prev => prev + 1);
+};
+;
   // Handle closing modal
   const handleCloseModal = () => {
     setIsEndSessionModalOpen(false);
@@ -153,6 +160,7 @@ const openPRReviewPanel = () => {
         sessionId={activeSessionId}
         onClick={openPRReviewPanel}
         isHost={isHost}
+        refreshCounter={notificationRefreshCounter}
       />
     </div>
   )}

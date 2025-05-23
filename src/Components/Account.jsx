@@ -70,7 +70,7 @@ const Account = () => {
       }
 
       // Use the correct API endpoint based on your server routes
-      const response = await axios.get(`https://kodesesh-server.onrender.com/api/auth/user/${userId}`, {
+      const response = await axios.get(`http://localhost:5000/api/auth/user/${userId}`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -144,7 +144,7 @@ const Account = () => {
       }
 
       // Use the correct API endpoint based on your server routes
-      const response = await axios.put(`https://kodesesh-server.onrender.com/api/auth/user/${userId}`, updateData, {
+      const response = await axios.put(`http://localhost:5000/api/auth/user/${userId}`, updateData, {
         headers: {
           Authorization: `Bearer ${token}`
         }
