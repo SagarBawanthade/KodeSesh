@@ -490,16 +490,7 @@ const CallPanel = ({
           }
         </button>
         
-        <button 
-          onClick={toggleScreenSharing}
-          className={`p-3 rounded-full ${isScreenSharing 
-            ? 'bg-green-500/80 hover:bg-green-600/80 border border-green-400/30' 
-            : 'bg-cyan-900/40 hover:bg-cyan-800/40 border border-cyan-700/30'} 
-            transition-all transform hover:scale-110 shadow-lg`}
-          aria-label={isScreenSharing ? "Stop screen sharing" : "Share screen"}
-        >
-          <Share size={22} className={isScreenSharing ? "text-white" : "text-cyan-300"} />
-        </button>
+        
         
         <button 
           onClick={forceReconnect}
@@ -510,9 +501,7 @@ const CallPanel = ({
           <RefreshCw size={22} className={`text-cyan-300 ${connectionStatus === 'connecting' ? 'animate-spin' : ''}`} />
         </button>
         
-        <button className="p-3 rounded-full bg-red-500 hover:bg-red-600 border border-red-400/30 transition-all transform hover:scale-110 shadow-[0_0_15px_rgba(239,68,68,0.4)]" aria-label="Leave call">
-          <Phone size={22} className="text-white" />
-        </button>
+       
       </div>
       
       {/* Connection status message (only shown when there's an issue) */}

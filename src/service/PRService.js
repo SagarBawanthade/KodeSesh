@@ -80,6 +80,7 @@ class PRService {
 }
 
 // Add this method to PRService
+// Add this method to PRService
 broadcastPR(event, pr) {
   try {
     // Try to get socket from various locations for reliability
@@ -94,43 +95,40 @@ broadcastPR(event, pr) {
     
     // If socket exists and is connected, broadcast PR
     if (socket && socket.connected) {
-      console.log(`Broadcasting PR event: ${event}`, pr);
+      console.log(`📤 Broadcasting PR event: ${event}`, pr);
       
-      // Add a small delay to ensure socket is ready
-      setTimeout(() => {
-        try {
-          socket.emit("prSync", {
-            sessionId: pr.sessionId,
-            eventType: event,
-            prData: pr
-          });
-          console.log('PR broadcast sent successfully');
-        } catch (socketError) {
-          console.error('Socket emit error during delay:', socketError);
-        }
-      }, 100);
+      const prSyncData = {
+        sessionId: pr.sessionId,
+        eventType: event,
+        prData: pr
+      };
       
-      // Also retry once after a longer delay as a backup
-      setTimeout(() => {
-        try {
-          socket.emit("prSync", {
-            sessionId: pr.sessionId,
-            eventType: event,
-            prData: pr
-          });
-          console.log('PR broadcast retry sent');
-        } catch (socketError) {
-          console.error('Socket emit error during retry:', socketError);
-        }
-      }, 1000);
+      try {
+        socket.emit("prSync", prSyncData);
+        console.log('✅ PR broadcast sent successfully');
+      } catch (socketError) {
+        console.error('❌ Socket emit error:', socketError);
+        
+        // Retry after a short delay
+        setTimeout(() => {
+          try {
+            socket.emit("prSync", prSyncData);
+            console.log('✅ PR broadcast retry sent');
+          } catch (retryError) {
+            console.error('❌ Socket emit retry error:', retryError);
+          }
+        }, 500);
+      }
     } else {
-      console.warn("No connected socket found for PR broadcast");
+      console.warn("⚠️ No connected socket found for PR broadcast");
       
       // Try to get available socket and reconnect if possible
       const availableSocket = window.socket || window.socketConnection;
       if (availableSocket && typeof availableSocket.connect === 'function' && !availableSocket.connected) {
         try {
+          console.log('🔄 Attempting socket reconnection...');
           availableSocket.connect();
+          
           // Try broadcast after reconnection
           setTimeout(() => {
             if (availableSocket.connected) {
@@ -139,20 +137,23 @@ broadcastPR(event, pr) {
                 eventType: event,
                 prData: pr
               });
-              console.log('PR broadcast sent after reconnection');
+              console.log('✅ PR broadcast sent after reconnection');
+            } else {
+              console.warn('⚠️ Socket still not connected after reconnection attempt');
             }
-          }, 500);
+          }, 1000);
         } catch (reconnectError) {
-          console.error('Socket reconnection error:', reconnectError);
+          console.error('❌ Socket reconnection error:', reconnectError);
         }
       }
     }
   } catch (error) {
-    console.warn("PR broadcast error:", error);
+    console.warn("❌ PR broadcast error:", error);
     // Don't throw - this is a non-critical feature
   }
 }
 
+// Add method to handle incoming PR sync
 // Add method to handle incoming PR sync
 handlePRSync(sessionId, eventType, prData) {
   console.log(`Received PR sync: ${eventType}`, prData);
@@ -188,6 +189,11 @@ handlePRSync(sessionId, eventType, prData) {
         this.savePRs();
         
         // Notify subscribers locally
+        this.notifySubscribers(eventType, prData);
+      } else {
+        // If PR doesn't exist locally, add it
+        this.pullRequests.push(prData);
+        this.savePRs();
         this.notifySubscribers(eventType, prData);
       }
       break;
@@ -252,6 +258,7 @@ handlePRSync(sessionId, eventType, prData) {
   
   // Review a PR
   // Review a PR
+a// Review a PR
 async reviewPR(id, action, comments = '') {
   const pr = this.getPRById(id);
   
@@ -322,11 +329,27 @@ async reviewPR(id, action, comments = '') {
   // Save changes
   this.savePRs();
   
+  // Map action to proper event name
+  let eventName;
+  switch (action) {
+    case 'approve':
+      eventName = 'pr-approved';
+      break;
+    case 'reject':
+      eventName = 'pr-rejected';
+      break;
+    case 'request-changes':
+      eventName = 'pr-changes-requested';
+      break;
+    default:
+      eventName = `pr-${action}d`;
+  }
+  
   // Notify local subscribers
-  this.notifySubscribers(`pr-${action}d`, pr);
+  this.notifySubscribers(eventName, pr);
   
   // IMPORTANT: Broadcast the review action to other users
-  this.broadcastPR(`pr-${action}d`, pr);
+  this.broadcastPR(eventName, pr);
   
   return { 
     success: true, 

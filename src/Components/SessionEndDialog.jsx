@@ -12,6 +12,8 @@ import {
 
 } from 'lucide-react';
 import prService from '../service/PRService';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 
 const SessionEndDialog = ({ 
   isOpen, 
@@ -31,6 +33,7 @@ const SessionEndDialog = ({
   const [creatingPR, setCreatingPR] = useState(false);
   const [showMessage, setShowMessage] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const navigate = useNavigate();
 
   const ensurePRBroadcast = (prData) => {
   // Make sure we have a socket
@@ -102,6 +105,11 @@ const SessionEndDialog = ({
       });
     }
     onClose();
+    setTimeout(() => {
+       // Reset authentication status
+    }, 2000);
+    navigate('/'); // Redirect to home or another page
+    toast.success("Session ended Successfully.")
   };
   
   // Handle GitHub authentication
@@ -507,67 +515,7 @@ const SessionEndDialog = ({
                   End Without PR
                 </button>
                 
-                {/* PR button with futuristic design */}
-                {/* <button 
-                  className="flex items-center py-2 px-4 bg-gradient-to-r from-indigo-600/50 to-cyan-600/50 hover:from-indigo-600/70 hover:to-cyan-600/70 rounded-lg text-gray-100 text-xs border border-cyan-500/30 transition-all duration-300 shadow-lg shadow-cyan-500/20"
-                  onClick={handleCreatePR}
-                  disabled={creatingPR}
-                >
-                  {creatingPR ? (
-                    <>
-                      <Loader size={14} className="mr-2 animate-spin" />
-                      <span>Creating PR...</span>
-                    </>
-                  ) : (
-                    <>
-                      <GitPullRequest size={14} className="mr-2 text-cyan-300" />
-                      <span>Create Pull Request</span>
-                    </>
-                  )}
-                </button> */}
-                {/* Add this button for PR creation */}
-  {/* <button 
-  className="flex items-center py-2 px-4 bg-gradient-to-r from-indigo-600/50 to-cyan-600/50 hover:from-indigo-600/70 hover:to-cyan-600/70 rounded-lg text-gray-100 text-xs border border-cyan-500/30 transition-all duration-300 shadow-lg shadow-cyan-500/20"
-  onClick={() => {
-    // Prompt user for a custom PR title
-    const userTitle = prompt("Enter a title for your pull request:", "Session End Changes");
-    
-    // If user cancels the prompt, don't proceed
-    if (userTitle === null) {
-      return;
-    }
-
-    // Generate a timestamp suffix to ensure uniqueness
-    const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
-    
-    // Combine user title with timestamp for uniqueness
-    const uniqueTitle = `${userTitle} - ${timestamp}`;
-    
-    // Create a PR through terminal command
-    if (typeof addToTerminal === 'function') {
-      addToTerminal({
-        type: 'input',
-        content: `pr create ${uniqueTitle}`
-      });
-      
-      // Call PR command handler if available via parent component
-      if (prCommandHandler?.current) {
-        prCommandHandler.current.handleCommand('create', [uniqueTitle]);
-      } else {
-        // Fallback if PR command handler is not available
-        addToTerminal({
-          type: 'output',
-          content: 'PR command handler not available. Session ended without creating PR.'
-        });
-      }
-    }
-    
-    onClose();
-  }}
->
-  <GitPullRequest size={14} className="mr-2 text-cyan-300" />
-  <span>Create Pull Request</span>
-</button> */}
+             
 
 
 
@@ -818,7 +766,7 @@ Created: ${new Date().toISOString()}
       setTimeout(() => {
         setShowMessage(false);
         onClose();
-      }, 5000);
+      }, 3000);
     } finally {
       // Always end creating state
       setCreatingPR(false);
