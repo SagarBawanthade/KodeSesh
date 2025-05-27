@@ -13,7 +13,7 @@ export const loginUser = createAsyncThunk(
   'user/login',
   async ({ email, password }, { rejectWithValue }) => {
     try {
-      const response = await axios.post('http://65.0.135.137:5000/api/auth/login', {
+      const response = await axios.post('https://backend.sagardev.site/api/auth/login', {
         email,
         password
       });
@@ -37,7 +37,7 @@ export const registerUser = createAsyncThunk(
   'user/register',
   async ({ name, email, password }, { rejectWithValue }) => {
     try {
-      const response = await axios.post('http://65.0.135.137:5000/api/auth/register', {
+      const response = await axios.post('https://backend.sagardev.site/api/auth/register', {
         name,
         email,
         password
@@ -67,7 +67,7 @@ export const getUserProfile = createAsyncThunk(
         return rejectWithValue('No token found');
       }
       
-      const response = await axios.get('http://65.0.135.137:5000/api/getuser', {
+      const response = await axios.get('https://backend.sagardev.site/api/getuser', {
         headers: {
           Authorization: `Bearer ${token}`
         }

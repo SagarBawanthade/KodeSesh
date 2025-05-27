@@ -106,7 +106,7 @@ const fetchSessionData = async () => {
     if (!activeSessionId) return;
     
     // Fetch session data from your API
-    const response = await fetch(`http://65.0.135.137:5000/api/session/${activeSessionId}`);
+    const response = await fetch(`https://backend.sagardev.site/api/session/${activeSessionId}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch session data: ${response.status}`);
     }
@@ -316,7 +316,7 @@ const verifyGitCredentials = async (token, owner, repo) => {
   // Socket connection
   useEffect(() => {
     // Create socket connection
-    const newSocket = io("http://65.0.135.137:5000", {
+    const newSocket = io("https://backend.sagardev.site", {
       transports: ["websocket", "polling"],
       upgrade: true,
       forceNew: true,
