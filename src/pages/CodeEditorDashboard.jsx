@@ -64,6 +64,7 @@ const CodeEditorDashboard = () => {
   const prCommandHandler = useRef(null);
   const [isUserHost, setIsUserHost] = useState(false);
   const [githubUser, setGithubUser] = useState(null);
+  const [sessionIdCopied, setSessionIdCopied] = useState(false);
   
   
   
@@ -661,6 +662,9 @@ if (user?.name) {
         prev.map(p => p.id.toString() === userId.toString() ? {...p, isVideoOff} : p)
       );
     });
+
+
+    
     
     // Listen for screen sharing events
     newSocket.on("screenSharingStarted", ({ userId }) => {
@@ -2456,6 +2460,32 @@ useEffect(() => {
   };
 }, [code, currentLanguage, activeSessionId]);
 
+
+const copySessionId = async () => {
+  try {
+    await navigator.clipboard.writeText(activeSessionId);
+    setSessionIdCopied(true);
+    
+    const entry = { 
+      type: 'output', 
+      content: `Session ID copied to clipboard: ${activeSessionId}` 
+    };
+    setTerminalOutput(prev => [...prev, entry]);
+    
+    setTimeout(() => setSessionIdCopied(false), 2000);
+  } catch (err) {
+    // Fallback for older browsers
+    const textArea = document.createElement('textarea');
+    textArea.value = activeSessionId;
+    document.body.appendChild(textArea);
+    textArea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textArea);
+    setSessionIdCopied(true);
+    setTimeout(() => setSessionIdCopied(false), 2000);
+  }
+};
+
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-[#0f172a] to-[#0c0f1d] text-gray-100 overflow-hidden font-sans">
     {/* Ambient background effect */}
@@ -2637,9 +2667,26 @@ useEffect(() => {
       </div>
       <div className="flex items-center space-x-2">
         <span className="font-semibold text-gray-400 uppercase text-[10px] tracking-wider">SESSION</span>
-        <span className="text-cyan-400 font-mono bg-gradient-to-r from-gray-800/60 to-gray-900/60 px-3 py-1 rounded-md border border-cyan-500/20 shadow-inner">
-          #{activeSessionId.slice(0, 6)}
-        </span>
+        <div className="flex items-center space-x-2 bg-gradient-to-r from-gray-800/60 to-gray-900/60 px-3 py-1 rounded-md border border-cyan-500/20 shadow-inner hover:border-cyan-400/30 transition-all group">
+  <span className="text-cyan-400 font-mono">
+    {activeSessionId.slice(0, 36)}
+  </span>
+  <button 
+    onClick={copySessionId}
+    className="relative p-1 rounded hover:bg-cyan-500/20 transition-all group-hover:opacity-100 opacity-60"
+    title={sessionIdCopied ? "Copied!" : "Copy Session ID"}
+  >
+    {sessionIdCopied ? (
+      <svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+      </svg>
+    ) : (
+      <svg className="w-3 h-3 text-cyan-400 hover:text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+      </svg>
+    )}
+  </button>
+</div>
       </div>
     </div>
     
