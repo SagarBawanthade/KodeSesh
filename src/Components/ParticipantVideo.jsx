@@ -1,279 +1,233 @@
 import { useEffect, useState, useRef } from 'react';
 import { MicOff, VideoOff } from 'lucide-react';
 
-const ParticipantVideo = ({ participant, isMain = false, videoRef = null, stream = null }) => {
-  const internalVideoRef = useRef(null);
-  const [hasVideoTrack, setHasVideoTrack] = useState(false);
-  const [hasAudioTrack, setHasAudioTrack] = useState(false);
-  const [videoLoaded, setVideoLoaded] = useState(false);
-  const [attemptedPlay, setAttemptedPlay] = useState(false);
+const ParticipantVideo = ({ 
+  participant, 
+  isMain = false, 
+  stream = null 
+}) => {
+  const videoRef = useRef(null);
+  const [videoError, setVideoError] = useState(null);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   
   // If participant is not defined, show a placeholder
   if (!participant) {
     return (
-      <div className={`relative rounded-lg overflow-hidden border border-gray-700 ${isMain ? 'h-full w-full' : 'h-full w-full'} bg-gray-900 flex items-center justify-center`}>
+      <div className={`relative rounded-lg overflow-hidden border border-gray-700 ${
+        isMain ? 'h-full w-full' : 'h-full w-full'
+      } bg-gray-900 flex items-center justify-center`}>
         <span className="text-gray-400 text-sm">No participant</span>
       </div>
     );
   }
   
   const { id, name, isHost, isMuted, isVideoOff } = participant;
-  const isLocalUser = id.toString() === localStorage.getItem("userId");
+  const userId = localStorage.getItem("userId");
+  const isLocalUser = id?.toString() === userId?.toString();
   
-  // Debug props
+  // Set up video stream when stream changes
   useEffect(() => {
-    console.log(`ParticipantVideo rendered for ${id} (${isLocalUser ? 'local' : 'remote'})`);
-    console.log(`Props: isMain=${isMain}, hasVideoRef=${!!videoRef}, hasStream=${!!stream}`);
-    if (stream) {
-      console.log(`Stream tracks: video=${stream.getVideoTracks().length}, audio=${stream.getAudioTracks().length}`);
-    }
-    if (isLocalUser && videoRef?.current?.srcObject) {
-      const localStream = videoRef.current.srcObject;
-      console.log(`Local stream: video=${localStream.getVideoTracks().length}, audio=${localStream.getAudioTracks().length}`);
-    }
-  }, [id, isLocalUser, isMain, videoRef, stream]);
-  
-  // Force the video to play when it becomes available
-  useEffect(() => {
-    const playVideo = async () => {
-      // Don't attempt to play if we've already tried
-      if (attemptedPlay) return;
-      
-      const videoElement = isLocalUser ? videoRef?.current : internalVideoRef.current;
-      if (!videoElement || !videoElement.srcObject) return;
-      
-      try {
-        await videoElement.play();
-        console.log(`Successfully played video for ${id}`);
-        setAttemptedPlay(true);
-      } catch (err) {
-        console.warn(`Could not autoplay video for ${id}:`, err);
-      }
-    };
-    
-    playVideo();
-  }, [id, isLocalUser, videoRef, attemptedPlay]);
-  
-  // Handle when stream changes or video ref becomes available
-  useEffect(() => {
-    // First, let's check if we actually have a video element to work with
-    const videoElement = isLocalUser && videoRef ? 
-      videoRef.current : 
-      internalVideoRef.current;
-    
-    if (!videoElement) {
-      console.log(`No video element for participant ${id}`);
+    const videoElement = videoRef.current;
+    if (!videoElement || !stream) {
+      setIsVideoPlaying(false);
       return;
     }
     
-    // Handle remote participant with stream
-    if (!isLocalUser && stream) {
-      console.log(`Setting external stream for remote participant ${id}`, stream);
-      
+    console.log(`Setting up video for participant ${id} (${isLocalUser ? 'local' : 'remote'})`);
+    
+    const setupVideo = async () => {
       try {
-        // Only set srcObject if it's different to avoid reload loops
+        setVideoError(null);
+        
+        // Only set srcObject if it's different
         if (videoElement.srcObject !== stream) {
           videoElement.srcObject = stream;
           
-          // Reset the play attempt flag to try again with the new stream
-          setAttemptedPlay(false);
+          // Set video properties
+          videoElement.autoplay = true;
+          videoElement.playsInline = true;
+          videoElement.muted = isLocalUser; // Only mute local video to prevent feedback
           
-          // Manually check stream for tracks
-          const videoTracks = stream.getVideoTracks();
-          const hasVideo = videoTracks.length > 0;
-          setHasVideoTrack(hasVideo);
+          // Mirror local video
+          if (isLocalUser) {
+            videoElement.style.transform = 'scaleX(-1)';
+          } else {
+            videoElement.style.transform = 'none';
+          }
           
-          const audioTracks = stream.getAudioTracks();
-          const hasAudio = audioTracks.length > 0;
-          setHasAudioTrack(hasAudio);
-          
-          console.log(`Remote stream for ${id}: video=${hasVideo}, audio=${hasAudio}`);
-          
-          // Track enabled state changes
-          const trackStateChanged = () => {
-            const videoEnabled = videoTracks.length > 0 && videoTracks[0].enabled;
-            const audioEnabled = audioTracks.length > 0 && audioTracks[0].enabled;
-            setHasVideoTrack(videoEnabled);
-            setHasAudioTrack(audioEnabled);
-            console.log(`Track state changed for ${id}: video=${videoEnabled}, audio=${audioEnabled}`);
-          };
-          
-          // Listen for track events
-          videoTracks.forEach(track => {
-            track.addEventListener('ended', trackStateChanged);
-            track.addEventListener('mute', trackStateChanged);
-            track.addEventListener('unmute', trackStateChanged);
-          });
-          
-          audioTracks.forEach(track => {
-            track.addEventListener('ended', trackStateChanged);
-            track.addEventListener('mute', trackStateChanged);
-            track.addEventListener('unmute', trackStateChanged);
-          });
-          
-          return () => {
-            // Clean up event listeners
-            videoTracks.forEach(track => {
-              track.removeEventListener('ended', trackStateChanged);
-              track.removeEventListener('mute', trackStateChanged);
-              track.removeEventListener('unmute', trackStateChanged);
-            });
+          // Wait for metadata to load
+          await new Promise((resolve, reject) => {
+            const handleLoadedMetadata = () => {
+              videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
+              videoElement.removeEventListener('error', handleError);
+              resolve();
+            };
             
-            audioTracks.forEach(track => {
-              track.removeEventListener('ended', trackStateChanged);
-              track.removeEventListener('mute', trackStateChanged);
-              track.removeEventListener('unmute', trackStateChanged);
-            });
-          };
+            const handleError = (e) => {
+              videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
+              videoElement.removeEventListener('error', handleError);
+              reject(new Error(`Video load error: ${e.target.error?.message || 'Unknown error'}`));
+            };
+            
+            if (videoElement.readyState >= 1) {
+              resolve(); // Already loaded
+            } else {
+              videoElement.addEventListener('loadedmetadata', handleLoadedMetadata);
+              videoElement.addEventListener('error', handleError);
+            }
+          });
+          
+          // Try to play the video
+          try {
+            await videoElement.play();
+            setIsVideoPlaying(true);
+            console.log(`Video playing for participant ${id}`);
+          } catch (playError) {
+            console.warn(`Autoplay failed for participant ${id}:`, playError);
+            
+            // If autoplay fails, try to play on user interaction
+            if (playError.name === 'NotAllowedError') {
+              const playOnInteraction = async () => {
+                try {
+                  await videoElement.play();
+                  setIsVideoPlaying(true);
+                  console.log(`Video started playing after user interaction for ${id}`);
+                  document.removeEventListener('click', playOnInteraction);
+                  document.removeEventListener('touchstart', playOnInteraction);
+                } catch (err) {
+                  console.error(`Failed to play video for ${id} even after interaction:`, err);
+                }
+              };
+              
+              document.addEventListener('click', playOnInteraction);
+              document.addEventListener('touchstart', playOnInteraction);
+            }
+          }
         }
       } catch (error) {
-        console.error(`Error setting stream for participant ${id}:`, error);
+        console.error(`Error setting up video for participant ${id}:`, error);
+        setVideoError(error.message);
+        setIsVideoPlaying(false);
       }
-    } 
-    // Handle local user's stream through videoRef
-    else if (isLocalUser && videoRef && videoRef.current && videoRef.current.srcObject) {
-      console.log(`Checking local stream from videoRef for participant ${id}`);
-      
-      const localStream = videoRef.current.srcObject;
-      
-      // Update track state for local user
-      const videoTracks = localStream.getVideoTracks();
-      const hasVideo = videoTracks.length > 0 && videoTracks[0].enabled;
-      setHasVideoTrack(hasVideo);
-      
-      const audioTracks = localStream.getAudioTracks();
-      const hasAudio = audioTracks.length > 0 && audioTracks[0].enabled;
-      setHasAudioTrack(hasAudio);
-      
-      console.log(`Local stream for ${id}: video=${hasVideo}, audio=${hasAudio}`);
-      
-      // Track state listener for local stream
-      const trackStateChanged = () => {
-        const videoEnabled = videoTracks.length > 0 && videoTracks[0].enabled;
-        const audioEnabled = audioTracks.length > 0 && audioTracks[0].enabled;
-        setHasVideoTrack(videoEnabled);
-        setHasAudioTrack(audioEnabled);
-        console.log(`Local track state changed: video=${videoEnabled}, audio=${audioEnabled}`);
-      };
-      
-      // Set up listeners
-      videoTracks.forEach(track => {
-        track.addEventListener('ended', trackStateChanged);
-        track.addEventListener('mute', trackStateChanged);
-        track.addEventListener('unmute', trackStateChanged);
-      });
-      
-      audioTracks.forEach(track => {
-        track.addEventListener('ended', trackStateChanged);
-        track.addEventListener('mute', trackStateChanged);
-        track.addEventListener('unmute', trackStateChanged);
-      });
-      
-      return () => {
-        // Clean up event listeners
-        videoTracks.forEach(track => {
-          track.removeEventListener('ended', trackStateChanged);
-          track.removeEventListener('mute', trackStateChanged);
-          track.removeEventListener('unmute', trackStateChanged);
-        });
-        
-        audioTracks.forEach(track => {
-          track.removeEventListener('ended', trackStateChanged);
-          track.removeEventListener('mute', trackStateChanged);
-          track.removeEventListener('unmute', trackStateChanged);
-        });
-      };
-    }
-  }, [stream, id, isMain, isLocalUser, videoRef]);
-
-  // Handle video loaded event
-  const handleVideoLoad = () => {
-    setVideoLoaded(true);
-    console.log(`Video loaded for participant ${id}`);
-  };
-
-  // Check if we should show video - this is the key function
+    };
+    
+    setupVideo();
+    
+    // Cleanup function
+    return () => {
+      if (videoElement && videoElement.srcObject === stream) {
+        videoElement.pause();
+        setIsVideoPlaying(false);
+      }
+    };
+  }, [stream, id, isLocalUser]);
+  
+  // Check if we should show video
   const shouldShowVideo = () => {
-    // For local user
-    if (isLocalUser) {
-      // Must have video ref and source object
-      if (!videoRef || !videoRef.current || !videoRef.current.srcObject) {
-        console.log(`Local user ${id} missing video source`);
-        return false;
-      }
-      
-      // Check for video tracks that are enabled
-      const localStream = videoRef.current.srcObject;
-      const videoTracks = localStream.getVideoTracks();
-      const hasVideoEnabled = videoTracks.length > 0 && videoTracks[0].enabled;
-      
-      console.log(`Local user ${id} video check: hasTrack=${videoTracks.length > 0}, enabled=${videoTracks.length > 0 ? videoTracks[0].enabled : false}, off=${isVideoOff}`);
-      
-      // Only show if track exists, is enabled, and user hasn't turned it off
-      return hasVideoEnabled && !isVideoOff;
-    }
+    if (!stream) return false;
     
-    // For remote users
-    if (!stream) {
-      console.log(`Remote user ${id} has no stream`);
-      return false;
-    }
-    
-    // Check for video tracks that are enabled
+    // Check if stream has active video tracks
     const videoTracks = stream.getVideoTracks();
-    const hasVideoEnabled = videoTracks.length > 0 && videoTracks[0].enabled;
+    const hasActiveVideoTrack = videoTracks.length > 0 && 
+                                videoTracks.some(track => track.enabled && track.readyState === 'live');
     
-    console.log(`Remote user ${id} video check: hasTrack=${videoTracks.length > 0}, enabled=${videoTracks.length > 0 ? videoTracks[0].enabled : false}, off=${isVideoOff}`);
-    
-    // Only show if track exists, is enabled, and user hasn't turned it off
-    return hasVideoEnabled && !isVideoOff;
+    // Show video if we have active tracks and user hasn't turned video off
+    return hasActiveVideoTrack && !isVideoOff && isVideoPlaying;
   };
-
-  // Determine if video should be shown
+  
   const showVideo = shouldShowVideo();
-
+  
   return (
-    <div className={`relative rounded-lg overflow-hidden ${isMain ? 'h-full w-full' : 'h-full w-full'} bg-gray-900 flex items-center justify-center`}>
-      {showVideo ? (
-        <video 
-          ref={isLocalUser ? videoRef : internalVideoRef} 
-          autoPlay 
-          playsInline
-          muted={isLocalUser || isMuted} // Mute for local user or if participant is muted
-          className={`h-full w-full object-cover ${videoLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}
-          onLoadedMetadata={handleVideoLoad}
-        />
-      ) : (
+    <div className={`relative rounded-lg overflow-hidden ${
+      isMain ? 'h-full w-full' : 'h-full w-full'
+    } bg-gray-900 flex items-center justify-center`}>
+      
+      {/* Video element - always render but conditionally show */}
+      <video 
+        ref={videoRef}
+        autoPlay 
+        playsInline
+        muted={isLocalUser}
+        className={`h-full w-full object-cover transition-opacity duration-300 ${
+          showVideo ? 'opacity-100' : 'opacity-0 absolute'
+        }`}
+        onLoadedMetadata={() => {
+          console.log(`Video metadata loaded for ${id}`);
+        }}
+        onError={(e) => {
+          console.error(`Video error for ${id}:`, e);
+          setVideoError(e.target.error?.message || 'Video playback error');
+          setIsVideoPlaying(false);
+        }}
+        onPlay={() => {
+          setIsVideoPlaying(true);
+          console.log(`Video started playing for ${id}`);
+        }}
+        onPause={() => {
+          setIsVideoPlaying(false);
+        }}
+      />
+      
+      {/* Fallback when video is not showing */}
+      {!showVideo && (
         <div className="flex flex-col items-center justify-center h-full w-full">
-          <div className={`${isMain ? 'h-20 w-20' : 'h-12 w-12'} rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold shadow-lg`}>
-            {name?.charAt(0)?.toUpperCase() || '?'}
+          <div className={`${
+            isMain ? 'h-20 w-20' : 'h-12 w-12'
+          } rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold shadow-lg`}>
+            <span className={isMain ? 'text-2xl' : 'text-lg'}>
+              {name?.charAt(0)?.toUpperCase() || '?'}
+            </span>
           </div>
           {isMain && (
-            <span className="text-gray-300 text-sm mt-2">
-              {isVideoOff ? 'Camera is off' : 'Video unavailable'}
-            </span>
+            <div className="text-center mt-3">
+              <span className="text-gray-300 text-sm block">
+                {videoError ? `Error: ${videoError}` :
+                 isVideoOff ? 'Camera is off' : 
+                 !stream ? 'Connecting...' :
+                 'Video loading...'}
+              </span>
+              {videoError && (
+                <button 
+                  onClick={() => {
+                    setVideoError(null);
+                    if (videoRef.current && stream) {
+                      videoRef.current.load();
+                    }
+                  }}
+                  className="text-cyan-400 text-xs mt-1 hover:text-cyan-300"
+                >
+                  Try again
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}
       
-      {/* Status overlay - only show on main view */}
+      {/* Status overlays */}
       {isMain && (
-        <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-center">
-          <div className="text-sm text-white font-medium">
-            {name}{isLocalUser ? ' (You)' : ''}
-            {isHost && <span className="ml-2 px-2 py-0.5 bg-blue-500/60 rounded-full text-xs">Host</span>}
-          </div>
-          <div className="flex items-center space-x-2">
-            {(!hasAudioTrack || isMuted) && (
-              <div className="bg-red-500/80 rounded-full p-1.5">
-                <MicOff size={14} className="text-white" />
-              </div>
-            )}
-            {(!hasVideoTrack || isVideoOff) && (
-              <div className="bg-red-500/80 rounded-full p-1.5 ml-1">
-                <VideoOff size={14} className="text-white" />
-              </div>
-            )}
+        <div className="absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-black/70 to-transparent">
+          <div className="flex justify-between items-start">
+            <div className="text-sm text-white font-medium">
+              <span>{name}{isLocalUser ? ' (You)' : ''}</span>
+              {isHost && (
+                <span className="ml-2 px-2 py-0.5 bg-blue-500/60 rounded-full text-xs">
+                  Host
+                </span>
+              )}
+            </div>
+            <div className="flex items-center space-x-2">
+              {isMuted && (
+                <div className="bg-red-500/80 rounded-full p-1.5">
+                  <MicOff size={14} className="text-white" />
+                </div>
+              )}
+              {isVideoOff && (
+                <div className="bg-red-500/80 rounded-full p-1.5">
+                  <VideoOff size={14} className="text-white" />
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -281,13 +235,24 @@ const ParticipantVideo = ({ participant, isMain = false, videoRef = null, stream
       {/* Mini status indicators for thumbnail view */}
       {!isMain && (
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-1 flex justify-between items-center">
-          <span className="text-xs text-white truncate">{name}{isLocalUser ? ' (You)' : ''}</span>
-          <div className="flex space-x-1">
-            {(!hasAudioTrack || isMuted) && <MicOff size={10} className="text-red-400" />}
-            {(!hasVideoTrack || isVideoOff) && <VideoOff size={10} className="text-red-400" />}
+          <span className="text-xs text-white truncate flex-1">
+            {name}{isLocalUser ? ' (You)' : ''}
+          </span>
+          <div className="flex space-x-1 ml-1">
+            {isMuted && <MicOff size={10} className="text-red-400" />}
+            {isVideoOff && <VideoOff size={10} className="text-red-400" />}
           </div>
         </div>
       )}
+      
+      {/* Connection indicator */}
+      <div className="absolute top-2 left-2">
+        <div className={`h-2 w-2 rounded-full ${
+          isVideoPlaying ? 'bg-green-400' : 
+          stream ? 'bg-yellow-400' : 
+          'bg-red-400'
+        }`}></div>
+      </div>
     </div>
   );
 };

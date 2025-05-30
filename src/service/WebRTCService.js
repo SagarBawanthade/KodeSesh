@@ -15,19 +15,27 @@ class WebRTCService {
     this.pendingAnswers = {}; // Store answers until they can be processed
     this.connectionState = {}; // Track connection state for each peer
     
-    // ICE servers configuration (STUN/TURN servers)
+    // ICE servers configuration - improved STUN/TURN servers
     this.iceServers = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
         {
           urls: 'turn:openrelay.metered.ca:80',
           username: 'openrelayproject',
           credential: 'openrelayproject'
+        },
+        {
+          urls: 'turn:openrelay.metered.ca:443',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
         }
-      ]
+      ],
+      iceCandidatePoolSize: 10
     };
     
-    // Socket event listeners
+    // Setup socket listeners
     this.setupSocketListeners();
     
     console.log(`WebRTC Service initialized for user ${userId} in session ${sessionId}`);
@@ -43,14 +51,11 @@ class WebRTCService {
     this.socket.on("rtcNewParticipant", ({ participantId }) => {
       console.log(`New participant joined: ${participantId}`);
       if (participantId !== this.userId) {
-        // Create a new peer connection for this participant
         this.createPeerConnection(participantId);
         
         // Only the participant with the higher ID initiates the offer
-        // This prevents both sides from sending offers simultaneously
         if (this.userId.toString() > participantId.toString()) {
           console.log(`I have higher ID, initiating offer to ${participantId}`);
-          // Wait a moment before sending the offer to ensure peer connection is ready
           setTimeout(() => {
             this.sendOffer(participantId);
           }, 1000);
@@ -62,15 +67,13 @@ class WebRTCService {
     
     // Handle incoming offers
     this.socket.on("rtcOffer", async ({ senderId, sdp }) => {
-      console.log(`Received offer from: ${senderId}`, sdp);
+      console.log(`Received offer from: ${senderId}`);
       if (senderId !== this.userId) {
         try {
-          // Store the offer if we can't process it immediately
           if (!this.peerConnections[senderId] || !this.isInitialized) {
             console.log(`Storing offer from ${senderId} for later processing`);
             this.pendingOffers[senderId] = sdp;
             
-            // Create a peer connection if it doesn't exist
             if (!this.peerConnections[senderId]) {
               this.createPeerConnection(senderId);
             }
@@ -81,8 +84,6 @@ class WebRTCService {
         } catch (error) {
           console.error(`Error handling offer from ${senderId}:`, error);
           this.cleanupPeerConnection(senderId);
-          
-          // Try to create a new connection
           setTimeout(() => {
             this.createPeerConnection(senderId);
           }, 2000);
@@ -92,10 +93,9 @@ class WebRTCService {
     
     // Handle incoming answers
     this.socket.on("rtcAnswer", ({ senderId, sdp }) => {
-      console.log(`Received answer from: ${senderId}`, sdp);
+      console.log(`Received answer from: ${senderId}`);
       if (senderId !== this.userId) {
-        // Store the answer if we can't process it immediately
-        if (!this.peerConnections[senderId] || !this.connectionState[senderId] || this.connectionState[senderId] !== 'offer-sent') {
+        if (!this.peerConnections[senderId] || this.connectionState[senderId] !== 'offer-sent') {
           console.log(`Storing answer from ${senderId} for later processing`);
           this.pendingAnswers[senderId] = sdp;
           return;
@@ -109,18 +109,14 @@ class WebRTCService {
     this.socket.on("rtcIceCandidate", ({ senderId, candidate }) => {
       console.log(`Received ICE candidate from: ${senderId}`);
       if (senderId !== this.userId) {
-        // Always store candidates
         if (!this.pendingIceCandidates[senderId]) {
           this.pendingIceCandidates[senderId] = [];
         }
         this.pendingIceCandidates[senderId].push(candidate);
         
-        // Try to apply if connection exists and is in right state
         if (this.peerConnections[senderId] && 
             this.peerConnections[senderId].remoteDescription) {
           this.applyIceCandidate(senderId, candidate);
-        } else {
-          console.log(`Storing ICE candidate for ${senderId} until connection is ready`);
         }
       }
     });
@@ -134,7 +130,7 @@ class WebRTCService {
       }
     });
     
-    // New event to explicitly request a connection
+    // Handle connection requests
     this.socket.on("rtcRequestConnection", ({ requesterId }) => {
       console.log(`Connection requested from: ${requesterId}`);
       if (requesterId !== this.userId) {
@@ -142,7 +138,6 @@ class WebRTCService {
           this.createPeerConnection(requesterId);
         }
         
-        // Only the participant with the higher ID initiates the offer
         if (this.userId.toString() > requesterId.toString()) {
           this.sendOffer(requesterId);
         }
@@ -156,42 +151,94 @@ class WebRTCService {
       
       // Stop any existing tracks
       if (this.localStream) {
-        this.localStream.getTracks().forEach(track => track.stop());
+        this.localStream.getTracks().forEach(track => {
+          track.stop();
+          console.log(`Stopped ${track.kind} track`);
+        });
       }
       
-      // Get user media with very basic constraints to ensure compatibility
+      // Enhanced constraints for better quality and compatibility
       const constraints = {
-        audio: audioEnabled,
-        video: videoEnabled
+        audio: audioEnabled ? {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 44100,
+          channelCount: 2
+        } : false,
+        video: videoEnabled ? {
+          width: { ideal: 1280, max: 1920, min: 320 },
+          height: { ideal: 720, max: 1080, min: 240 },
+          frameRate: { ideal: 30, max: 60, min: 15 },
+          facingMode: 'user',
+          aspectRatio: { ideal: 16/9 }
+        } : false
       };
       
       console.log("Requesting media with constraints:", constraints);
-      this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      try {
+        this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (error) {
+        console.warn("Failed with ideal constraints, trying fallback:", error);
+        
+        // Fallback with basic constraints
+        const fallbackConstraints = {
+          audio: audioEnabled,
+          video: videoEnabled ? { 
+            width: 640, 
+            height: 480,
+            frameRate: 15 
+          } : false
+        };
+        
+        this.localStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+      }
+      
       console.log("Local media stream obtained successfully", this.localStream);
       
-      // Debug the tracks we received
+      // Log track details
       this.localStream.getTracks().forEach(track => {
-        console.log(`Local track: kind=${track.kind}, enabled=${track.enabled}, state=${track.readyState}`);
+        console.log(`Local track: kind=${track.kind}, enabled=${track.enabled}, state=${track.readyState}, label=${track.label}`);
         
-        // Explicitly enable all tracks
-        track.enabled = true;
+        // Ensure tracks are enabled
+        track.enabled = track.kind === 'audio' ? audioEnabled : videoEnabled;
+        
+        // Add event listeners for track state changes
+        track.addEventListener('ended', () => {
+          console.log(`${track.kind} track ended`);
+        });
+        
+        track.addEventListener('mute', () => {
+          console.log(`${track.kind} track muted`);
+        });
+        
+        track.addEventListener('unmute', () => {
+          console.log(`${track.kind} track unmuted`);
+        });
       });
       
-      // Flag that we've successfully initialized
       this.isInitialized = true;
       
       // Process any pending offers
       for (const peerId in this.pendingOffers) {
         console.log(`Processing pending offer from ${peerId}`);
-        this.handleOffer(peerId, this.pendingOffers[peerId])
-          .catch(err => console.error(`Error handling pending offer from ${peerId}:`, err));
+        try {
+          await this.handleOffer(peerId, this.pendingOffers[peerId]);
+        } catch (err) {
+          console.error(`Error handling pending offer from ${peerId}:`, err);
+        }
         delete this.pendingOffers[peerId];
       }
       
       // Process any pending answers
       for (const peerId in this.pendingAnswers) {
         console.log(`Processing pending answer from ${peerId}`);
-        this.handleAnswer(peerId, this.pendingAnswers[peerId]);
+        try {
+          await this.handleAnswer(peerId, this.pendingAnswers[peerId]);
+        } catch (err) {
+          console.error(`Error handling pending answer from ${peerId}:`, err);
+        }
         delete this.pendingAnswers[peerId];
       }
       
@@ -203,18 +250,40 @@ class WebRTCService {
       return this.localStream;
     } catch (error) {
       console.error("Error accessing media devices:", error);
-      alert(`Error accessing camera/microphone: ${error.message}. Please ensure your browser has permission to access your camera and microphone.`);
       
-      // Try fallback with just audio if video fails
-      if (videoEnabled) {
-        console.log("Trying fallback to audio only");
-        return this.initLocalStream(audioEnabled, false);
+      // Provide user-friendly error messages
+      let errorMessage = "Error accessing camera/microphone: ";
+      switch (error.name) {
+        case 'NotAllowedError':
+          errorMessage += "Permission denied. Please allow camera and microphone access.";
+          break;
+        case 'NotFoundError':
+          errorMessage += "No camera or microphone found. Please connect your devices.";
+          break;
+        case 'NotReadableError':
+          errorMessage += "Camera or microphone is already in use by another application.";
+          break;
+        case 'OverconstrainedError':
+          errorMessage += "Camera/microphone doesn't support the requested settings.";
+          break;
+        default:
+          errorMessage += error.message;
       }
-      throw error;
+      
+      // Try audio-only fallback if video fails
+      if (videoEnabled && error.name !== 'NotAllowedError') {
+        console.log("Trying audio-only fallback");
+        try {
+          return await this.initLocalStream(audioEnabled, false);
+        } catch (audioError) {
+          console.error("Audio-only fallback also failed:", audioError);
+        }
+      }
+      
+      throw new Error(errorMessage);
     }
   }
   
-  // Update existing peer connection with current local stream
   updatePeerConnection(peerId) {
     const pc = this.peerConnections[peerId];
     if (!pc) {
@@ -223,20 +292,47 @@ class WebRTCService {
     }
     
     try {
-      // Remove all existing senders
-      const senders = pc.getSenders();
-      senders.forEach(sender => {
-        pc.removeTrack(sender);
-      });
+      console.log(`Updating peer connection for ${peerId}`);
       
-      // Add all tracks from local stream
+      // Get current senders
+      const senders = pc.getSenders();
+      
       if (this.localStream) {
-        this.localStream.getTracks().forEach(track => {
-          console.log(`Adding ${track.kind} track to peer ${peerId}`);
-          pc.addTrack(track, this.localStream);
+        const streamTracks = this.localStream.getTracks();
+        
+        // Update existing senders or add new tracks
+        streamTracks.forEach(track => {
+          const sender = senders.find(s => s.track && s.track.kind === track.kind);
+          
+          if (sender) {
+            console.log(`Replacing ${track.kind} track for peer ${peerId}`);
+            sender.replaceTrack(track).catch(err => {
+              console.error(`Error replacing ${track.kind} track:`, err);
+              // If replace fails, remove and add
+              pc.removeTrack(sender);
+              pc.addTrack(track, this.localStream);
+            });
+          } else {
+            console.log(`Adding ${track.kind} track to peer ${peerId}`);
+            pc.addTrack(track, this.localStream);
+          }
+        });
+        
+        // Remove senders for tracks that no longer exist
+        senders.forEach(sender => {
+          if (sender.track && !streamTracks.find(t => t.kind === sender.track.kind)) {
+            console.log(`Removing ${sender.track.kind} sender for peer ${peerId}`);
+            pc.removeTrack(sender);
+          }
         });
       } else {
         console.warn("No local stream available when updating peer connection");
+        // Remove all tracks if no stream
+        senders.forEach(sender => {
+          if (sender.track) {
+            pc.removeTrack(sender);
+          }
+        });
       }
     } catch (error) {
       console.error(`Error updating peer connection for ${peerId}:`, error);
@@ -249,34 +345,29 @@ class WebRTCService {
     }
   }
   
-  // Create a new peer connection for a specific participant
   createPeerConnection(participantId) {
-    // First clean up any existing connection
     if (this.peerConnections[participantId]) {
-      console.log(`Peer connection already exists for ${participantId}, resetting it`);
+      console.log(`Peer connection already exists for ${participantId}, cleaning up first`);
       this.cleanupPeerConnection(participantId);
     }
     
     console.log(`Creating new peer connection for ${participantId}`);
     
     try {
-      // Initialize tracking structures for this peer
+      this.connectionState[participantId] = 'new';
+      
       if (!this.pendingIceCandidates[participantId]) {
         this.pendingIceCandidates[participantId] = [];
       }
-      this.connectionState[participantId] = 'new';
       
-      // Create new RTCPeerConnection with ICE servers
       const pc = new RTCPeerConnection(this.iceServers);
       
-      // Add local tracks to the connection if available
+      // Add local tracks immediately if available
       if (this.localStream) {
         this.localStream.getTracks().forEach(track => {
           console.log(`Adding ${track.kind} track to new peer connection for ${participantId}`);
           pc.addTrack(track, this.localStream);
         });
-      } else {
-        console.warn("No local stream available when creating peer connection");
       }
       
       // Handle ICE candidate generation
@@ -294,13 +385,14 @@ class WebRTCService {
         }
       };
       
-      // Handler for ICE connection state changes
+      // Handle ICE connection state changes
       pc.oniceconnectionstatechange = () => {
         console.log(`ICE connection state for ${participantId}: ${pc.iceConnectionState}`);
         
-        // If connection fails, retry
-        if (pc.iceConnectionState === 'failed') {
-          console.log(`ICE connection failed for ${participantId}, restarting`);
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+          this.connectionRetries[participantId] = 0;
+        } else if (pc.iceConnectionState === 'failed') {
+          console.log(`ICE connection failed for ${participantId}`);
           
           if (!this.connectionRetries[participantId]) {
             this.connectionRetries[participantId] = 0;
@@ -308,82 +400,54 @@ class WebRTCService {
           
           if (this.connectionRetries[participantId] < 3) {
             this.connectionRetries[participantId]++;
+            console.log(`Restarting ICE for ${participantId} (attempt ${this.connectionRetries[participantId]})`);
             pc.restartIce();
-            
-            // If we were the offerer, send a new offer
-            if (this.connectionState[participantId] === 'offer-sent') {
-              setTimeout(() => {
-                this.sendOffer(participantId);
-              }, 2000);
-            }
           } else {
-            console.log(`Too many retries for ${participantId}, recreating connection`);
+            console.log(`Too many ICE restart attempts for ${participantId}, recreating connection`);
             this.cleanupPeerConnection(participantId);
-            
-            // Try to recreate the connection
             setTimeout(() => {
               this.createPeerConnection(participantId);
-              
-              // Only initiate if we're the higher ID
-              if (this.userId.toString() > participantId.toString()) {
-                this.sendOffer(participantId);
-              }
             }, 3000);
           }
-        }
-        
-        // Reset retry counter if connection becomes stable
-        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-          this.connectionRetries[participantId] = 0;
         }
       };
       
       // Handle connection state changes
       pc.onconnectionstatechange = () => {
         console.log(`Connection state for ${participantId}: ${pc.connectionState}`);
+        
         if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-          console.log(`Connection lost with ${participantId}, cleaning up`);
-          this.cleanupPeerConnection(participantId);
-          
-          // After a delay, try to reconnect
+          console.log(`Connection lost with ${participantId}`);
           setTimeout(() => {
-            this.createPeerConnection(participantId);
-            
-            // Only initiate if we're the higher ID
-            if (this.userId.toString() > participantId.toString()) {
-              this.sendOffer(participantId);
+            if (this.peerConnections[participantId] === pc) {
+              this.cleanupPeerConnection(participantId);
+              this.createPeerConnection(participantId);
             }
           }, 5000);
         }
       };
       
-      // Don't use negotiationneeded - it can cause race conditions
-      
       // Handle incoming tracks/streams
       pc.ontrack = (event) => {
         console.log(`Received remote track from ${participantId}:`, event.track.kind, event.streams);
         
-        // Ensure the stream has an ID for identification
         const stream = event.streams[0];
-        if (stream) {
-          // Add a data attribute to identify this stream
+        if (stream && stream.active) {
           stream.participantId = participantId;
           
-          // Debug stream tracks
+          // Log track details
           stream.getTracks().forEach(track => {
-            console.log(`Remote track: ${track.kind}, enabled=${track.enabled}, state=${track.readyState}`);
+            console.log(`Remote track from ${participantId}: ${track.kind}, enabled=${track.enabled}, state=${track.readyState}`);
           });
           
-          // Notify the application of the new stream
+          // Notify the application
           if (this.onRemoteStreamUpdate) {
             this.onRemoteStreamUpdate(participantId, stream);
           }
         }
       };
       
-      // Store the peer connection
       this.peerConnections[participantId] = pc;
-      
       return pc;
     } catch (error) {
       console.error(`Error creating peer connection for ${participantId}:`, error);
@@ -391,21 +455,13 @@ class WebRTCService {
     }
   }
   
-  // Apply a single ICE candidate
   async applyIceCandidate(peerId, candidate) {
     try {
       const pc = this.peerConnections[peerId];
-      if (!pc) {
-        console.log(`No peer connection for ${peerId} when applying ICE candidate`);
+      if (!pc || !pc.remoteDescription) {
         return false;
       }
       
-      if (!pc.remoteDescription) {
-        console.log(`Cannot apply ICE candidate for ${peerId} without remote description`);
-        return false;
-      }
-      
-      // Add the ICE candidate to the peer connection
       console.log(`Adding ICE candidate to peer ${peerId}`);
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
       return true;
@@ -415,59 +471,47 @@ class WebRTCService {
     }
   }
   
-  // Apply any pending ICE candidates
   async applyPendingIceCandidates(peerId) {
     const pc = this.peerConnections[peerId];
     const pendingCandidates = this.pendingIceCandidates[peerId] || [];
     
-    if (!pc || !pc.remoteDescription) {
-      console.log(`Cannot apply pending ICE candidates for ${peerId} - not ready`);
+    if (!pc || !pc.remoteDescription || pendingCandidates.length === 0) {
       return;
     }
     
-    if (pendingCandidates.length > 0) {
-      console.log(`Applying ${pendingCandidates.length} pending ICE candidates for ${peerId}`);
-      
-      // Create a copy before we start modifying the array
-      const candidates = [...pendingCandidates];
-      
-      // Clear pending candidates list immediately to avoid race conditions
-      this.pendingIceCandidates[peerId] = [];
-      
-      // Try to apply each candidate
-      for (const candidate of candidates) {
-        await this.applyIceCandidate(peerId, candidate);
-      }
+    console.log(`Applying ${pendingCandidates.length} pending ICE candidates for ${peerId}`);
+    
+    const candidates = [...pendingCandidates];
+    this.pendingIceCandidates[peerId] = [];
+    
+    for (const candidate of candidates) {
+      await this.applyIceCandidate(peerId, candidate);
     }
   }
   
-  // Send an offer to a specific participant
   async sendOffer(participantId) {
     try {
       const pc = this.peerConnections[participantId];
       if (!pc) {
         console.error(`No peer connection for ${participantId} when trying to send offer`);
-        // Try to create a new connection
         this.createPeerConnection(participantId);
         return;
       }
       
-      // Update connection state
       this.connectionState[participantId] = 'creating-offer';
       
       console.log(`Creating offer for ${participantId}`);
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
-        offerToReceiveVideo: true
+        offerToReceiveVideo: true,
+        iceRestart: false
       });
       
       console.log(`Setting local description for ${participantId}`);
       await pc.setLocalDescription(offer);
       
-      // Update connection state
       this.connectionState[participantId] = 'offer-sent';
       
-      // Send the offer immediately
       console.log(`Sending offer to ${participantId}`);
       this.socket.emit("rtcOffer", {
         sessionId: this.sessionId,
@@ -477,11 +521,8 @@ class WebRTCService {
       });
     } catch (error) {
       console.error(`Error creating offer for ${participantId}:`, error);
-      
-      // Reset connection state
       this.connectionState[participantId] = 'error';
       
-      // Try to recreate the connection
       this.cleanupPeerConnection(participantId);
       setTimeout(() => {
         this.createPeerConnection(participantId);
@@ -489,15 +530,11 @@ class WebRTCService {
     }
   }
   
-  // Handle an incoming offer
   async handleOffer(senderId, sdp) {
     try {
       console.log(`Handling offer from ${senderId}`);
-      
-      // Update connection state
       this.connectionState[senderId] = 'handling-offer';
       
-      // Create new connection if it doesn't exist
       let pc = this.peerConnections[senderId];
       if (!pc) {
         pc = this.createPeerConnection(senderId);
@@ -506,9 +543,8 @@ class WebRTCService {
         }
       }
       
-      // Make sure we're in a clean state
       if (pc.signalingState !== 'stable') {
-        console.log(`Resetting peer connection for ${senderId} - not in stable state`);
+        console.log(`Resetting peer connection for ${senderId} - not in stable state (${pc.signalingState})`);
         this.cleanupPeerConnection(senderId);
         pc = this.createPeerConnection(senderId);
         if (!pc) {
@@ -516,25 +552,19 @@ class WebRTCService {
         }
       }
       
-      // Set remote description (the offer)
       console.log(`Setting remote description from ${senderId}`);
       await pc.setRemoteDescription(new RTCSessionDescription(sdp));
       
-      // Apply any pending ICE candidates now that we have the remote description
       await this.applyPendingIceCandidates(senderId);
       
-      // Create answer
       console.log(`Creating answer for ${senderId}`);
       const answer = await pc.createAnswer();
       
-      // Set local description (our answer)
       console.log(`Setting local description for ${senderId}`);
       await pc.setLocalDescription(answer);
       
-      // Update connection state
       this.connectionState[senderId] = 'answer-sent';
       
-      // Send the answer back
       console.log(`Sending answer to ${senderId}`);
       this.socket.emit("rtcAnswer", {
         sessionId: this.sessionId,
@@ -544,59 +574,44 @@ class WebRTCService {
       });
     } catch (error) {
       console.error(`Error handling offer from ${senderId}:`, error);
-      
-      // Update connection state
       this.connectionState[senderId] = 'error';
-      
-      // Try to clean up and create a fresh connection
       this.cleanupPeerConnection(senderId);
-      
-      // We don't need to request reconnection, the other side will retry
     }
   }
   
-  // Handle an incoming answer
   async handleAnswer(senderId, sdp) {
     try {
       console.log(`Handling answer from ${senderId}`);
       const pc = this.peerConnections[senderId];
+      
       if (!pc) {
         console.error(`No peer connection for ${senderId} when handling answer`);
-        // Store answer for later
         this.pendingAnswers[senderId] = sdp;
         return;
       }
       
       if (pc.signalingState !== 'have-local-offer') {
-        console.log(`Peer ${senderId} not in the right state to receive answer, current state: ${pc.signalingState}`);
-        // Store answer for later
+        console.log(`Peer ${senderId} not in correct state for answer (${pc.signalingState})`);
         this.pendingAnswers[senderId] = sdp;
         return;
       }
       
-      // Apply the remote description (their answer)
       console.log(`Setting remote description from ${senderId}`);
       await pc.setRemoteDescription(new RTCSessionDescription(sdp));
       
-      // Update connection state
       this.connectionState[senderId] = 'connected';
       
-      // Apply any pending ICE candidates now that we have the remote description
       await this.applyPendingIceCandidates(senderId);
       
       console.log(`Connection established with ${senderId}`);
     } catch (error) {
       console.error(`Error handling answer from ${senderId}:`, error);
-      
-      // Update connection state
       this.connectionState[senderId] = 'error';
       
-      // Try to recreate the connection
       this.cleanupPeerConnection(senderId);
       setTimeout(() => {
         this.createPeerConnection(senderId);
         
-        // Only reinitiate if we're the higher ID
         if (this.userId.toString() > senderId.toString()) {
           this.sendOffer(senderId);
         }
@@ -604,13 +619,11 @@ class WebRTCService {
     }
   }
   
-  // Clean up a peer connection
   cleanupPeerConnection(participantId) {
     const pc = this.peerConnections[participantId];
     if (pc) {
       console.log(`Cleaning up peer connection for ${participantId}`);
       
-      // Remove all event handlers
       pc.ontrack = null;
       pc.onicecandidate = null;
       pc.oniceconnectionstatechange = null;
@@ -618,71 +631,63 @@ class WebRTCService {
       pc.onconnectionstatechange = null;
       pc.onnegotiationneeded = null;
       
-      // Close the connection
-      pc.close();
+      try {
+        pc.close();
+      } catch (error) {
+        console.error(`Error closing peer connection for ${participantId}:`, error);
+      }
       
-      // Remove from our connections map
       delete this.peerConnections[participantId];
       delete this.connectionRetries[participantId];
       delete this.connectionState[participantId];
+      delete this.pendingIceCandidates[participantId];
+      delete this.pendingOffers[participantId];
+      delete this.pendingAnswers[participantId];
     }
   }
   
-  // Toggle audio
   toggleAudio(enabled) {
     if (this.localStream) {
       this.localStream.getAudioTracks().forEach(track => {
-        console.log(`Setting audio track enabled: ${enabled}`);
         track.enabled = enabled;
+        console.log(`Audio track enabled: ${enabled}`);
       });
     }
   }
   
-  // Toggle video
   toggleVideo(enabled) {
     if (this.localStream) {
       this.localStream.getVideoTracks().forEach(track => {
-        console.log(`Setting video track enabled: ${enabled}`);
         track.enabled = enabled;
+        console.log(`Video track enabled: ${enabled}`);
       });
     }
   }
   
-  // Get all active peer connections
   getActivePeers() {
     return Object.keys(this.peerConnections);
   }
   
-  // Clean up all connections and resources
   cleanup() {
     console.log("Cleaning up WebRTC service");
     
-    // Stop local stream tracks
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => {
         track.stop();
+        console.log(`Stopped ${track.kind} track`);
       });
       this.localStream = null;
     }
     
-    // Close all peer connections
     Object.keys(this.peerConnections).forEach(peerId => {
       this.cleanupPeerConnection(peerId);
     });
     
-    // Clear callbacks
     this.onRemoteStreamUpdate = null;
     this.onParticipantDisconnect = null;
-    
-    // Reset state
     this.isInitialized = false;
-    this.pendingIceCandidates = {};
-    this.pendingOffers = {};
-    this.pendingAnswers = {};
-    this.connectionState = {};
   }
   
-  // Notify server that this client is ready for WebRTC
   signalReady() {
     console.log("Signaling WebRTC ready to other participants");
     
@@ -691,38 +696,33 @@ class WebRTCService {
       return;
     }
     
-    // Notify the server that we're ready for WebRTC connections
     this.socket.emit("rtcReady", {
       sessionId: this.sessionId,
       userId: this.userId
     });
     
-    // Get existing participants to establish connections
     this.socket.emit("getParticipants", this.sessionId);
     
-    // Listen for the participants list to create connections
     this.socket.once("participantsList", (participants) => {
       console.log("Received participants list for establishing connections:", participants);
       
       participants.forEach(participant => {
-        // Don't create connection to ourselves
         if (participant.id.toString() !== this.userId.toString()) {
           console.log(`Initiating connection to participant ${participant.id}`);
           
-          // Request a connection to each participant
           this.socket.emit("rtcRequestConnection", {
             sessionId: this.sessionId,
             requesterId: this.userId,
             targetId: participant.id
           });
           
-          // Create our side of the connection
           this.createPeerConnection(participant.id);
           
-          // Only the participant with the higher ID initiates the offer
           if (this.userId.toString() > participant.id.toString()) {
             console.log(`I have higher ID, sending offer to ${participant.id}`);
-            this.sendOffer(participant.id);
+            setTimeout(() => {
+              this.sendOffer(participant.id);
+            }, 1000);
           } else {
             console.log(`I have lower ID, waiting for offer from ${participant.id}`);
           }
@@ -731,28 +731,24 @@ class WebRTCService {
     });
   }
   
-  // Request reconnection to all peers (useful if things aren't working)
   reconnectAll() {
     console.log("Attempting to reconnect to all peers");
     
-    // Clean up existing connections first
     Object.keys(this.peerConnections).forEach(peerId => {
       this.cleanupPeerConnection(peerId);
     });
     
-    // Get fresh list of participants
     this.socket.emit("getParticipants", this.sessionId);
     
-    // Handle the response
     this.socket.once("participantsList", (participants) => {
       participants.forEach(participant => {
         if (participant.id.toString() !== this.userId.toString()) {
-          // Create fresh connections to each
           this.createPeerConnection(participant.id);
           
-          // Only the participant with the higher ID initiates the offer
           if (this.userId.toString() > participant.id.toString()) {
-            this.sendOffer(participant.id);
+            setTimeout(() => {
+              this.sendOffer(participant.id);
+            }, 1000);
           }
         }
       });
