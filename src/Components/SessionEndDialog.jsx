@@ -108,7 +108,9 @@ const SessionEndDialog = ({
     setTimeout(() => {
        // Reset authentication status
     }, 2000);
-    navigate('/'); // Redirect to home or another page
+    navigate('/'); 
+    window.location.reload(); // Reload to reset state
+    // Redirect to home or another page
     toast.success("Session ended Successfully.")
   };
   
